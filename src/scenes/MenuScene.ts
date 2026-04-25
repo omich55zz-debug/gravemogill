@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { progress, ACHIEVEMENTS } from "../systems/Progress";
+import { hasSave, readSave, deleteSave, saveAgeLabel } from "../systems/SaveSystem";
 
 export class MenuScene extends Phaser.Scene {
   private dailyBonus = 0;
@@ -38,16 +39,41 @@ export class MenuScene extends Phaser.Scene {
       fontFamily: "serif", fontSize: "28px", color: "#b9a97a", fontStyle: "italic",
     }).setOrigin(0.5);
 
-    const btn = this.add.rectangle(width / 2, height / 2 + 70, 260, 60, 0x3a2c1f)
+    const saveExists = hasSave();
+    const save = saveExists ? readSave() : null;
+
+    // Primary button: Continue (if save exists) OR Start.
+    const primaryY = height / 2 + 50;
+    const primaryLabel = saveExists ? "Продолжить" : "Начать смену";
+    const btn = this.add.rectangle(width / 2, primaryY, 280, 60, 0x3a2c1f)
       .setStrokeStyle(2, 0x8c6a36).setInteractive({ useHandCursor: true });
-    const label = this.add.text(width / 2, height / 2 + 70, "Начать смену", {
+    const label = this.add.text(width / 2, primaryY, primaryLabel, {
       fontFamily: "serif", fontSize: "24px", color: "#f0e7c8",
     }).setOrigin(0.5);
     btn.on("pointerover", () => { btn.setFillStyle(0x4e3c2a); });
     btn.on("pointerout", () => { btn.setFillStyle(0x3a2c1f); });
-    btn.on("pointerup", () => this.startGame());
+    btn.on("pointerup", () => saveExists ? this.continueGame() : this.startGame());
     label.setInteractive({ useHandCursor: true });
-    label.on("pointerup", () => this.startGame());
+    label.on("pointerup", () => saveExists ? this.continueGame() : this.startGame());
+
+    if (saveExists && save) {
+      this.add.text(width / 2, primaryY + 38, `День ${save.day}, ${String(save.hour).padStart(2, "0")}:00  ·  ₽${save.money}  ·  ${saveAgeLabel(save.savedAtMs)}`, {
+        fontFamily: "serif", fontSize: "13px", color: "#9a8f72",
+      }).setOrigin(0.5);
+
+      // Secondary: Start a new game (wipes save after confirmation).
+      const newY = primaryY + 80;
+      const newBtn = this.add.rectangle(width / 2, newY, 280, 42, 0x241820)
+        .setStrokeStyle(1, 0x6a4a50).setInteractive({ useHandCursor: true });
+      const newLabel = this.add.text(width / 2, newY, "Новая игра", {
+        fontFamily: "serif", fontSize: "16px", color: "#c9a9a9",
+      }).setOrigin(0.5);
+      newBtn.on("pointerover", () => newBtn.setFillStyle(0x3a242c));
+      newBtn.on("pointerout", () => newBtn.setFillStyle(0x241820));
+      newBtn.on("pointerup", () => this.confirmNewGame());
+      newLabel.setInteractive({ useHandCursor: true });
+      newLabel.on("pointerup", () => this.confirmNewGame());
+    }
 
     this.add.text(width / 2, height - 30,
       "Помогите мистеру Королёву превратить родовые земли в место последнего прибежища.",
@@ -165,5 +191,19 @@ export class MenuScene extends Phaser.Scene {
   private startGame() {
     this.scene.start("Game", { startingBonus: this.dailyBonus });
     this.scene.launch("UI");
+  }
+
+  private continueGame() {
+    this.scene.start("Game", { startingBonus: this.dailyBonus, loadSave: true });
+    this.scene.launch("UI");
+  }
+
+  private confirmNewGame() {
+    const ok = typeof window !== "undefined"
+      ? window.confirm("Начать новую игру? Текущее сохранение будет стёрто.")
+      : true;
+    if (!ok) return;
+    deleteSave();
+    this.scene.restart();
   }
 }

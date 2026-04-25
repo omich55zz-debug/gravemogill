@@ -10,6 +10,7 @@ import { OrderSystem, type Order } from "../systems/OrderSystem";
 import { itemById, type CatalogItem } from "../data/catalog";
 import { progress } from "../systems/Progress";
 import { audio } from "../systems/Audio";
+import { saveGame, readSave } from "../systems/SaveSystem";
 
 interface DecorationInstance {
   item: CatalogItem;
@@ -57,11 +58,14 @@ export class GameScene extends Phaser.Scene {
   uiModalOpen = false;
 
   private startingBonus = 0;
+  private shouldLoadSave = false;
+  private autosaveTimer = 0;
 
   constructor() { super("Game"); }
 
-  init(data: { startingBonus?: number }) {
+  init(data: { startingBonus?: number; loadSave?: boolean }) {
     this.startingBonus = data?.startingBonus ?? 0;
+    this.shouldLoadSave = !!data?.loadSave;
   }
 
   create() {
@@ -187,9 +191,13 @@ export class GameScene extends Phaser.Scene {
       while (this.orders.pending.length < this.minPendingOrders) this.orders.generate(day);
     });
 
-    // Seed starting orders.
-    this.orders.generate(this.gameTime.day);
-    this.orders.generate(this.gameTime.day);
+    if (this.shouldLoadSave) {
+      this.applySave();
+    } else {
+      // Seed starting orders for a brand new game.
+      this.orders.generate(this.gameTime.day);
+      this.orders.generate(this.gameTime.day);
+    }
 
     // Start ambient soundtrack (resume if already running).
     audio.music.start();
@@ -197,6 +205,18 @@ export class GameScene extends Phaser.Scene {
     // Resize handling
     this.scale.on("resize", () => this.refreshZoom());
     this.refreshZoom();
+
+    // Save on tab close / hide (mobile + desktop). Removed on shutdown.
+    const saveOnHide = () => this.saveNow();
+    window.addEventListener("beforeunload", saveOnHide);
+    window.addEventListener("pagehide", saveOnHide);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") this.saveNow();
+    });
+    this.events.once("shutdown", () => {
+      window.removeEventListener("beforeunload", saveOnHide);
+      window.removeEventListener("pagehide", saveOnHide);
+    });
   }
 
   update(_t: number, deltaMs: number) {
@@ -225,6 +245,13 @@ export class GameScene extends Phaser.Scene {
     if (this.zombieSpawnCooldown <= 0 && !this.uiModalOpen) {
       this.zombieSpawnCooldown = 4000 + Math.random() * 4000;
       this.maybeSpawnZombie();
+    }
+
+    // Autosave every 10 seconds while not in a modal.
+    this.autosaveTimer += deltaMs;
+    if (this.autosaveTimer > 10_000 && !this.uiModalOpen) {
+      this.autosaveTimer = 0;
+      this.saveNow();
     }
 
     // Focused cell = tile the player is currently standing on
@@ -516,6 +543,106 @@ export class GameScene extends Phaser.Scene {
     };
     if (ui && typeof ui.showAchievementToast === "function") {
       ui.showAchievementToast(def.title, def.icon, def.rewardCoins);
+    }
+  }
+
+  /** Public: writes the full game state to localStorage. */
+  saveNow() {
+    saveGame({
+      economy: this.economy,
+      time: this.gameTime,
+      orders: this.orders,
+      grid: this.grid,
+      playerX: this.player?.x,
+      playerY: this.player?.y,
+    });
+  }
+
+  /** Rebuild world state from a previously-saved snapshot. Called during create(). */
+  private applySave() {
+    const s = readSave();
+    if (!s) return;
+    this.economy.money = s.money;
+    this.economy.emit("changed", this.economy.money, 0);
+    this.gameTime.day = s.day;
+    this.gameTime.hour = s.hour;
+    (this.gameTime as unknown as { accum: number; lastHour: number }).accum = s.accum ?? 0;
+    (this.gameTime as unknown as { accum: number; lastHour: number }).lastHour = s.hour;
+    // Restore grid: default everything back to grass-with-initial-plots, then
+    // apply overrides from the save.
+    for (const row of this.grid.cells) {
+      for (const cell of row) {
+        cell.grave = undefined;
+      }
+    }
+    for (const snap of s.cells) {
+      const cell = this.grid.at(snap.c, snap.r);
+      if (!cell) continue;
+      cell.terrain = snap.t;
+      if (snap.g) {
+        cell.grave = {
+          tombstoneId: snap.g.tombstoneId,
+          decorations: [...snap.g.decorations],
+          fence: snap.g.fence,
+          inscription: snap.g.inscription,
+          orderId: snap.g.orderId,
+          completed: snap.g.completed,
+        };
+      }
+      this.redrawTile(cell.col, cell.row);
+    }
+    // Rebuild grave visuals (tombstone, decorations, fence, inscription).
+    for (const row of this.grid.cells) {
+      for (const cell of row) {
+        if (!cell.grave) continue;
+        const v = { decorations: [] as DecorationInstance[], completed: !!cell.grave.completed };
+        this.graveVisuals.set(graveKey(cell.col, cell.row), v as unknown as GraveVisual);
+        const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+        if (cell.grave.tombstoneId) {
+          const item = itemById(cell.grave.tombstoneId);
+          if (item) {
+            (v as GraveVisual).tombstone = this.add.image(x, y + 4, item.sprite)
+              .setOrigin(0.5, 0.9).setDepth(y + 10);
+            this.layerDecor.add((v as GraveVisual).tombstone!);
+          }
+        }
+        if (cell.grave.fence) {
+          const item = itemById(cell.grave.fence);
+          if (item) {
+            (v as GraveVisual).fence = this.add.image(x, y + 2, item.sprite)
+              .setOrigin(0.5, 0.9).setDepth(y + 9);
+            this.layerDecor.add((v as GraveVisual).fence!);
+          }
+        }
+        for (const did of cell.grave.decorations) {
+          const item = itemById(did);
+          if (!item) continue;
+          let dx = 0, dy = 0;
+          if (item.category === "flower") { dx = -5 + Math.floor(Math.random() * 11); dy = -1 + Math.floor(Math.random() * 3); }
+          else if (item.category === "lantern") { dx = item.id.includes("oil") ? -6 : 6; dy = -4; }
+          else { dx = 0; dy = -7; }
+          const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 12);
+          this.layerDecor.add(img);
+          (v as GraveVisual).decorations.push({ item, image: img });
+        }
+        if (cell.grave.inscription) {
+          const text = cell.grave.inscription;
+          const inscription = this.add.text(x, y - 4, shorten(text, 14), {
+            fontFamily: "serif", fontSize: "4px", color: "#1a1a1a", align: "center", wordWrap: { width: 14 },
+          }).setOrigin(0.5, 0.5).setResolution(4).setDepth(y + 11);
+          this.layerDecor.add(inscription);
+          (v as GraveVisual).inscription = inscription;
+        }
+      }
+    }
+    // Orders
+    this.orders.pending = s.pending ?? [];
+    this.orders.active = s.active ?? [];
+    this.orders.history = s.history ?? [];
+    // Restore player position if available.
+    if (typeof s.playerX === "number" && typeof s.playerY === "number") {
+      this.player.sprite.x = s.playerX;
+      this.player.sprite.y = s.playerY;
     }
   }
 

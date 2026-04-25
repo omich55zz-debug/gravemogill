@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { CONFIG } from "../data/config";
 
 export class Economy extends Phaser.Events.EventEmitter {
-  money = CONFIG.STARTING_MONEY;
+  money: number = CONFIG.STARTING_MONEY;
 
   canAfford(n: number) { return this.money >= n; }
 
