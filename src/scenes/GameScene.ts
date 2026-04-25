@@ -271,7 +271,10 @@ export class GameScene extends Phaser.Scene {
     this.keys.right = this.cursors.right!.isDown || this.wasd.D.isDown;
 
     if (!this.uiModalOpen) {
-      this.player.update(dt, this.keys);
+      // In first-person mode, movement is relative to the camera yaw so
+      // "forward" always means "where the player is looking".
+      const camYaw = this.three.firstPerson ? this.three.lookYaw : 0;
+      this.player.update(dt, this.keys, camYaw);
       // Keep player in bounds
       this.player.sprite.x = Phaser.Math.Clamp(this.player.sprite.x, 8, WORLD_W - 8);
       this.player.sprite.y = Phaser.Math.Clamp(this.player.sprite.y, 10, WORLD_H - 2);
@@ -291,7 +294,15 @@ export class GameScene extends Phaser.Scene {
     if (this.player.mesh3D) {
       const p = this.three.phaserToThree(this.player.x, this.player.y);
       this.player.mesh3D.position.set(p.x, 0, p.z);
-      this.player.mesh3D.rotation.y = this.player.facingYaw;
+      // In first-person we hide the player body mesh (the elf gravedigger's
+      // body is off-camera; only hands/lantern are seen via the lantern light).
+      if (this.three.firstPerson) {
+        this.player.mesh3D.visible = false;
+        this.player.facingYaw = this.three.lookYaw;
+      } else {
+        this.player.mesh3D.visible = true;
+        this.player.mesh3D.rotation.y = this.player.facingYaw;
+      }
     }
     if (this.cat.mesh3D) {
       const c = this.three.phaserToThree(this.cat.sprite.x, this.cat.sprite.y);
@@ -906,34 +917,66 @@ export class GameScene extends Phaser.Scene {
   }
 
   private installCameraControls() {
-    // Mouse wheel = 3D zoom.
-    this.input.on("wheel", (_p: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
+    // First-person mode is on by default. Player holds a lantern. Look is
+    // driven by pointer-drag (any single-pointer drag outside the virtual
+    // joystick / HUD hit-zones rotates the view).
+    this.three.setFirstPerson(true);
+    this.three.ensurePlayerLantern();
+
+    // Pointer look: dragging with a single pointer rotates camera.
+    // We ignore the left-bottom area (virtual joystick) and the right-bottom
+    // action button so movement controls still work.
+    let dragging = false;
+    let lastX = 0, lastY = 0;
+    let dragPointerId = -1;
+
+    const isInJoystickZone = (px: number, py: number): boolean => {
+      // Virtual joystick is bottom-left; action button bottom-right;
+      // top bar is top area. Look-zone = middle of the screen.
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (py < 70) return true; // top HUD
+      if (py > h - 200 && px < 260) return true; // joystick
+      if (py > h - 200 && px > w - 260) return true; // action button
+      return false;
+    };
+
+    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.uiModalOpen) return;
-      this.three.setZoom(this.three.orbitDistance * (dy > 0 ? 1.12 : 0.88));
+      if (dragging) return;
+      if (isInJoystickZone(p.x, p.y)) return;
+      dragging = true;
+      dragPointerId = p.id;
+      lastX = p.x;
+      lastY = p.y;
     });
 
-    // Pinch = zoom (two-finger).
-    let pinchStartDist = 0;
-    let pinchStartDistance3D = 0;
-    this.input.on("pointermove", () => {
-      const p1 = this.input.pointer1;
-      const p2 = this.input.pointer2;
-      if (p1?.isDown && p2?.isDown) {
-        const d = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-        if (pinchStartDist === 0) {
-          pinchStartDist = d;
-          pinchStartDistance3D = this.three.orbitDistance;
-        } else if (d > 0) {
-          this.three.setZoom(pinchStartDistance3D * (pinchStartDist / d));
-        }
-      } else {
-        pinchStartDist = 0;
+    this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
+      if (!dragging || p.id !== dragPointerId) return;
+      const dx = p.x - lastX;
+      const dy = p.y - lastY;
+      lastX = p.x;
+      lastY = p.y;
+      // Horizontal drag → yaw, vertical drag → pitch.
+      this.three.rotateBy(dx * 0.006, dy * 0.004);
+    });
+
+    const endDrag = (p: Phaser.Input.Pointer) => {
+      if (p.id === dragPointerId) {
+        dragging = false;
+        dragPointerId = -1;
       }
-    });
+    };
+    this.input.on("pointerup", endDrag);
+    this.input.on("pointerupoutside", endDrag);
 
-    // Keyboard Q/R = rotate camera yaw (E is reserved for the action key).
-    this.input.keyboard?.on("keydown-Q", () => this.three.rotateBy(-0.15, 0));
-    this.input.keyboard?.on("keydown-R", () => this.three.rotateBy(0.15, 0));
+    // Keyboard Q/E = rotate look yaw left/right.
+    this.input.keyboard?.on("keydown-Q", () => this.three.rotateBy(-0.12, 0));
+    this.input.keyboard?.on("keydown-R", () => this.three.rotateBy(0.12, 0));
+
+    // No zoom in first-person mode — camera is always at eye height. We keep
+    // pinch reserved for future look-speed adjustment but disable zoom
+    // changes on wheel to prevent accidental mode exit.
   }
 }
 

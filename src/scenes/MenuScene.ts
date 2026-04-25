@@ -35,8 +35,8 @@ export class MenuScene extends Phaser.Scene {
       fontFamily: "serif", fontSize: "56px", color: "#e8e1cf",
     }).setOrigin(0.5).setShadow(2, 2, "#000", 4);
 
-    this.add.text(width / 2, height / 2 - 30, "мистера Королёва", {
-      fontFamily: "serif", fontSize: "28px", color: "#b9a97a", fontStyle: "italic",
+    this.add.text(width / 2, height / 2 - 30, "Эльданара Могильщика", {
+      fontFamily: "serif", fontSize: "26px", color: "#b9a97a", fontStyle: "italic",
     }).setOrigin(0.5);
 
     const saveExists = hasSave();
@@ -75,9 +75,13 @@ export class MenuScene extends Phaser.Scene {
       newLabel.on("pointerup", () => this.confirmNewGame());
     }
 
-    this.add.text(width / 2, height - 30,
-      "Помогите мистеру Королёву превратить родовые земли в место последнего прибежища.",
+    this.add.text(width / 2, height - 52,
+      "Вы — старый эльф Эльданар, смотритель родового некрополя.",
       { fontFamily: "serif", fontSize: "14px", color: "#a29680" }
+    ).setOrigin(0.5);
+    this.add.text(width / 2, height - 30,
+      "Возьмите фонарь. Ночь холодна, а мёртвые — беспокойны.",
+      { fontFamily: "serif", fontSize: "13px", color: "#7e7260", fontStyle: "italic" }
     ).setOrigin(0.5);
 
     // Daily login card (top-left)

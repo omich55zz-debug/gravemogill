@@ -18,7 +18,11 @@ export class Player {
     this.sprite = scene.add.image(x, y, "player").setOrigin(0.5, 0.9).setDepth(0).setScale(1.6);
   }
 
-  update(dt: number, keys: { up: boolean; down: boolean; left: boolean; right: boolean }) {
+  update(
+    dt: number,
+    keys: { up: boolean; down: boolean; left: boolean; right: boolean },
+    cameraYaw = 0,
+  ) {
     let vx = 0, vy = 0;
     if (keys.left) vx -= 1;
     if (keys.right) vx += 1;
@@ -28,6 +32,20 @@ export class Player {
     vy += this.stick.y;
     const m = Math.hypot(vx, vy) || 1;
     vx /= m; vy /= m;
+    // Rotate input by camera yaw so movement is relative to the look
+    // direction. yaw=0 ⇒ forward = +y (south), which matches the raw mapping
+    // above, so cameraYaw=0 is a no-op.
+    if (cameraYaw !== 0) {
+      const cos = Math.cos(cameraYaw);
+      const sin = Math.sin(cameraYaw);
+      // Forward unit (in x, y_phaser space) = (sin(yaw), cos(yaw)).
+      // Strafe-right unit = (cos(yaw), -sin(yaw)).
+      // yaw=0 ⇒ forward is +y (south), matching the raw key mapping.
+      const forwardAmt = -vy; // "up" key ⇒ forward
+      const strafeAmt = vx;   // "right" key ⇒ strafe right
+      vx = forwardAmt * sin + strafeAmt * cos;
+      vy = forwardAmt * cos - strafeAmt * sin;
+    }
     this.sprite.x += vx * this.speed * dt;
     this.sprite.y += vy * this.speed * dt;
     this.shadow.x = this.sprite.x;

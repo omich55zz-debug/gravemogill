@@ -11,7 +11,7 @@ import {
   tree, grassClump, pond,
 } from "./meshes";
 import {
-  grassGroundTexture, stonePathTexture, earthTexture,
+  grassGroundTexture, stonePathTexture, earthTexture, nightSkyTexture,
 } from "./textures";
 
 // 1 tile = 1 world unit in Three.js space.
@@ -47,19 +47,32 @@ export class ThreeWorld {
   // Tile type map for the current cemetery (col,row -> terrain)
   private tileTypes: string[][] = [];
 
-  // Camera orbit params.
+  // Camera orbit params (orbit mode, used as fallback / for UI).
   private orbitTarget = new THREE.Vector3(0, 0, 0);
   orbitDistance = 18;
   orbitAngleH = Math.PI / 4; // yaw
-  orbitAngleV = Math.PI / 3.5; // pitch (higher = more top-down)
+  orbitAngleV = Math.PI / 3.5; // pitch
   minDistance = 8;
   maxDistance = 42;
 
+  // First-person camera state.
+  /** If true, camera is at player head height and orbits via yaw/pitch look. */
+  firstPerson = true;
+  /** Yaw (around Y) of player's look/body — exposed so GameScene can use it for movement vector. */
+  lookYaw = 0;
+  /** Pitch (around X) of head — clamped. */
+  lookPitch = 0;
+  /** Eye position (set each frame from player world x/z). */
+  private eye = new THREE.Vector3(0, 1.65, 0);
+
+  // Extra decorative lights (kept warm for lanterns).
+  private torchLights: Array<{ light: THREE.PointLight; phase: number; intensity: number }> = [];
+
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
-    // Bright daytime sky (soft cyan-blue gradient faked via solid + fog).
-    this.scene.background = new THREE.Color(0x7eaacb);
-    this.scene.fog = new THREE.Fog(0xa8c4dc, 38, 80);
+    // Dark gothic night — night sky panorama, very dense low-visibility fog.
+    this.scene.background = nightSkyTexture();
+    this.scene.fog = new THREE.Fog(0x0a0f18, 10, 34);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -68,7 +81,7 @@ export class ThreeWorld {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.25;
+    this.renderer.toneMappingExposure = 0.9;
     this.canvas = this.renderer.domElement;
     this.canvas.style.position = "absolute";
     this.canvas.style.inset = "0";
@@ -76,17 +89,20 @@ export class ThreeWorld {
     this.canvas.style.imageRendering = "auto";
     parent.appendChild(this.canvas);
 
-    this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.05, 200);
 
-    // Lighting — bright daytime: strong warm sun, sky ambience.
-    this.ambient = new THREE.HemisphereLight(0xcfe6ff, 0x5a6a3c, 1.1);
+    // Lighting — dark gothic:
+    //  • ambient kept low so scene is legible but moody
+    //  • 'sun' repurposed as cold moonlight from above
+    //  • warm fill from opposite side simulates distant torches / lantern glow
+    this.ambient = new THREE.HemisphereLight(0x5a6a88, 0x18120e, 0.35);
     this.scene.add(this.ambient);
 
-    this.sun = new THREE.DirectionalLight(0xfff3c8, 2.0);
-    this.sun.position.set(-14, 22, -10);
+    this.sun = new THREE.DirectionalLight(0xb8caff, 0.85);
+    this.sun.position.set(-12, 28, -10);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const s = 34;
+    const s = 30;
     this.sun.shadow.camera.left = -s;
     this.sun.shadow.camera.right = s;
     this.sun.shadow.camera.top = s;
@@ -94,13 +110,13 @@ export class ThreeWorld {
     this.sun.shadow.camera.near = 0.5;
     this.sun.shadow.camera.far = 90;
     this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.02;
+    this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    // Cool sky fill from opposite side for subtle rim-light.
-    const fill = new THREE.DirectionalLight(0x9bbfdf, 0.5);
-    fill.position.set(15, 10, 12);
+    // Warm opposite-side fill (distant torches).
+    const fill = new THREE.DirectionalLight(0xff9a48, 0.18);
+    fill.position.set(14, 6, 12);
     this.scene.add(fill);
 
     window.addEventListener("resize", () => this.onResize());
@@ -217,6 +233,21 @@ export class ThreeWorld {
     const pondObj = pond(2.2);
     pondObj.position.set(-cols / 2 + 4.5, 0, rows / 2 - 4.5);
     this.scene.add(pondObj);
+
+    // Scatter warm flickering torches along the main path and at corners so
+    // the cemetery isn't pitch-black beyond the player's lantern reach.
+    const torchPositions: Array<[number, number]> = [
+      [0, 0], [5, 0], [-5, 0], [0, 5], [0, -5],
+      [10, 6], [-10, 6], [10, -6], [-10, -6],
+      [-14, 10], [14, 10], [-14, -10], [14, -10],
+    ];
+    for (const [dx, dz] of torchPositions) {
+      this.addTorch(dx, 1.8, dz, 0xffa346, 1.4, 6.0);
+    }
+    // Cool moonbeam pillar as atmospheric fill on the pond.
+    const moonPillar = new THREE.PointLight(0xa8c6ff, 0.8, 10, 1.5);
+    moonPillar.position.set(-cols / 2 + 4.5, 4, rows / 2 - 4.5);
+    this.scene.add(moonPillar);
   }
 
   setFocus(col: number, row: number, visible: boolean) {
@@ -312,18 +343,52 @@ export class ThreeWorld {
 
   setOrbitTarget(x: number, z: number) {
     this.orbitTarget.set(x, 0, z);
+    this.eye.x = x;
+    this.eye.z = z;
   }
 
   setZoom(distance: number) {
     this.orbitDistance = Math.max(this.minDistance, Math.min(this.maxDistance, distance));
   }
 
+  /**
+   * Rotate look direction. In first-person mode this controls the player's
+   * head (yaw + pitch). In orbit mode it controls orbit angles.
+   */
   rotateBy(dYaw: number, dPitch: number) {
-    this.orbitAngleH += dYaw;
-    this.orbitAngleV = Math.max(0.35, Math.min(1.3, this.orbitAngleV + dPitch));
+    if (this.firstPerson) {
+      this.lookYaw += dYaw;
+      // Clamp pitch to avoid flipping — -1.3 (up) .. +1.3 (down).
+      this.lookPitch = Math.max(-1.2, Math.min(1.2, this.lookPitch + dPitch));
+    } else {
+      this.orbitAngleH += dYaw;
+      this.orbitAngleV = Math.max(0.35, Math.min(1.3, this.orbitAngleV + dPitch));
+    }
+  }
+
+  setFirstPerson(fp: boolean) {
+    this.firstPerson = fp;
   }
 
   updateCamera() {
+    if (this.firstPerson) {
+      const cx = this.eye.x;
+      const cz = this.eye.z;
+      const eyeY = 1.65;
+      this.camera.position.set(cx, eyeY, cz);
+      // Look direction: yaw around +Y, pitch around X. Our yaw 0 = +Z
+      // (south), matching the orbit-camera and movement convention.
+      const cosP = Math.cos(this.lookPitch);
+      const sinP = Math.sin(this.lookPitch);
+      const dirX = Math.sin(this.lookYaw) * cosP;
+      const dirZ = Math.cos(this.lookYaw) * cosP;
+      const dirY = -sinP; // +pitch = look down
+      this.camera.lookAt(cx + dirX, eyeY + dirY, cz + dirZ);
+      // Shadow frustum follows the player.
+      this.sun.target.position.set(cx, 0, cz);
+      this.sun.position.set(cx - 12, 28, cz - 10);
+      return;
+    }
     const d = this.orbitDistance;
     const pitch = this.orbitAngleV;
     const yaw = this.orbitAngleH;
@@ -338,13 +403,66 @@ export class ThreeWorld {
       cz + d * cosP * Math.cos(yaw)
     );
     this.camera.lookAt(cx, cy + 0.6, cz);
-    // Keep shadow frustum following the player
     this.sun.target.position.set(cx, 0, cz);
-    this.sun.position.set(cx - 14, 20, cz - 10);
+    this.sun.position.set(cx - 12, 28, cz - 10);
+  }
+
+  /** Main lantern held by the player — warm flickering point light. */
+  private playerLantern?: THREE.PointLight;
+
+  /** Create a lantern light that follows the player for first-person immersion. */
+  ensurePlayerLantern(): THREE.PointLight {
+    if (this.playerLantern) return this.playerLantern;
+    const l = new THREE.PointLight(0xffa346, 3.5, 9.5, 1.4);
+    l.castShadow = true;
+    l.shadow.mapSize.set(512, 512);
+    l.shadow.camera.near = 0.05;
+    l.shadow.camera.far = 10;
+    l.shadow.bias = -0.002;
+    this.scene.add(l);
+    this.playerLantern = l;
+    return l;
+  }
+
+  /** Update lantern position + flicker. Call once per frame after eye is set. */
+  updatePlayerLantern(t: number) {
+    const l = this.playerLantern;
+    if (!l) return;
+    const cosY = Math.cos(this.lookYaw);
+    const sinY = Math.sin(this.lookYaw);
+    // Lantern held slightly forward, below eye, to right side.
+    l.position.set(
+      this.eye.x + sinY * 0.3 + cosY * 0.35,
+      1.15,
+      this.eye.z + cosY * 0.3 - sinY * 0.35
+    );
+    // Flicker: base + small noise.
+    const flick = 0.85 + Math.sin(t * 0.009) * 0.08 + Math.sin(t * 0.027) * 0.06 + (Math.random() - 0.5) * 0.05;
+    l.intensity = 3.5 * flick;
+  }
+
+  /** Update every registered torch's flicker. */
+  updateTorches(t: number) {
+    for (const tl of this.torchLights) {
+      const f = 0.85 + Math.sin(t * 0.01 + tl.phase) * 0.1 + (Math.random() - 0.5) * 0.08;
+      tl.light.intensity = tl.intensity * f;
+    }
+  }
+
+  /** Add a static torch / candle point light at world coords (x, y, z). */
+  addTorch(x: number, y: number, z: number, color = 0xffa346, intensity = 1.6, distance = 5): THREE.PointLight {
+    const l = new THREE.PointLight(color, intensity, distance, 1.6);
+    l.position.set(x, y, z);
+    this.scene.add(l);
+    this.torchLights.push({ light: l, phase: Math.random() * Math.PI * 2, intensity });
+    return l;
   }
 
   render() {
     this.updateCamera();
+    const t = performance.now();
+    this.updatePlayerLantern(t);
+    this.updateTorches(t);
     this.renderer.render(this.scene, this.camera);
   }
 
