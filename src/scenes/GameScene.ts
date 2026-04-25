@@ -8,6 +8,7 @@ import { TimeSystem } from "../systems/TimeSystem";
 import { OrderSystem, type Order } from "../systems/OrderSystem";
 import { itemById, type CatalogItem } from "../data/catalog";
 import { progress } from "../systems/Progress";
+import { audio } from "../systems/Audio";
 
 interface DecorationInstance {
   item: CatalogItem;
@@ -124,21 +125,29 @@ export class GameScene extends Phaser.Scene {
     (this.wasd.E as Phaser.Input.Keyboard.Key).on("down", () => this.triggerAction());
 
     // Cat crystal hookup
-    this.cat.on("crystalCollected", (value: number, x: number, y: number) => {
+    this.cat.on("crystalCollected", (value: number, x: number, y: number, rare?: boolean) => {
       this.economy.earn(value);
-      this.showFloatText(`+${value}₽ кристалл`, x, y, "#a8f0ff");
+      const color = rare ? "#e7b5ff" : "#a8f0ff";
+      const label = rare ? `+${value}₽ РЕДКИЙ кристалл!` : `+${value}₽ кристалл`;
+      this.showFloatText(label, x, y, color);
+      audio.play(rare ? "rareCrystal" : "crystal");
       this.tryUnlock("crystal_finder");
+      if (rare) this.tryUnlock("rare_crystal");
       progress.bump("crystalsCollected");
+      if (rare) progress.bump("rareCrystalsCollected");
     });
 
     // Money milestone achievements
-    this.economy.on("change", () => {
+    this.economy.on("changed", () => {
       if (this.economy.money >= 100) this.tryUnlock("tycoon_100");
       if (this.economy.money >= 1000) this.tryUnlock("tycoon_1000");
     });
 
     // Order acceptance
-    this.orders.on("accepted", () => this.tryUnlock("first_order"));
+    this.orders.on("accepted", () => {
+      audio.play("click");
+      this.tryUnlock("first_order");
+    });
 
     // Order events
     this.orders.on("completed", ({ order, payout, verdict }: { order: Order; payout: number; verdict: string }) => {
@@ -149,13 +158,21 @@ export class GameScene extends Phaser.Scene {
       const color = verdict === "perfect" ? "#b8e994" : verdict === "over" ? "#e6a94a" : verdict === "under" ? "#ffd080" : "#ff7070";
       const msg = verdict === "perfect" ? "Идеально!" : verdict === "over" ? "Слишком пышно" : verdict === "under" ? "Скромновато" : "Просрочено";
       this.showFloatText(`${msg} +${payout}₽`, this.player.x, this.player.y - 20, color);
+      audio.play(verdict === "failed" ? "fail" : "success");
+      audio.play("coin");
       this.tryUnlock("first_complete");
       const n = progress.bump("ordersCompleted");
       if (n >= 5) this.tryUnlock("five_graves");
+      if (n >= 20) this.tryUnlock("twenty_graves");
+      if (verdict === "perfect") {
+        const p = progress.bump("perfectOrders");
+        if (p >= 3) this.tryUnlock("three_perfect");
+      }
     });
 
     this.orders.on("failed", (order: Order) => {
       this.economy.earn(-Math.floor(order.budget * 0.2)); // reputation penalty
+      audio.play("fail");
       this.showFloatText(`Заказ провален! −${Math.floor(order.budget * 0.2)}₽`, this.player.x, this.player.y - 20, "#ff6868");
     });
 
@@ -170,6 +187,9 @@ export class GameScene extends Phaser.Scene {
     // Seed starting orders.
     this.orders.generate(this.gameTime.day);
     this.orders.generate(this.gameTime.day);
+
+    // Start ambient soundtrack (resume if already running).
+    audio.music.start();
 
     // Resize handling
     this.scale.on("resize", () => this.refreshZoom());
@@ -252,7 +272,9 @@ export class GameScene extends Phaser.Scene {
     cell.terrain = "hole";
     cell.grave = { decorations: [] };
     this.redrawTile(cell.col, cell.row);
+    audio.play("dig");
     this.tryUnlock("first_grave");
+    this.maybeHint("place_tomb");
     this.showFloatText(`Выкопано −${CONFIG.DIG_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
     return true;
   }
@@ -272,6 +294,9 @@ export class GameScene extends Phaser.Scene {
     v.tombstone = this.add.image(x, y + 4, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 10);
     this.layerDecor.add(v.tombstone);
     cell.grave!.tombstoneId = item.id;
+    audio.play("place");
+    this.maybeHint("add_decor");
+    this.maybeHint("inscribe");
     this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
     return true;
   }
@@ -300,6 +325,7 @@ export class GameScene extends Phaser.Scene {
     this.layerDecor.add(img);
     v.decorations.push({ item, image: img });
     cell.grave!.decorations.push(item.id);
+    audio.play("place");
     this.tryUnlock("first_decor");
     this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
     return true;
@@ -331,6 +357,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5, 0.5).setResolution(4).setDepth(y + 11);
     this.layerDecor.add(v.inscription);
     cell.grave!.inscription = text;
+    this.maybeHint("complete");
   }
 
   buildPath(cell: Cell): boolean {
@@ -341,7 +368,9 @@ export class GameScene extends Phaser.Scene {
     }
     cell.terrain = "path";
     this.redrawTile(cell.col, cell.row);
+    audio.play("path");
     this.tryUnlock("path_builder");
+    this.maybeHint("paths");
     this.showFloatText(`Дорожка −${CONFIG.PATH_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
     return true;
   }
@@ -416,11 +445,20 @@ export class GameScene extends Phaser.Scene {
     if (!def) return;
     // Award coin bonus and show a toast via the UI scene.
     this.economy.earn(def.rewardCoins);
+    audio.play("unlock");
     const ui = this.scene.get("UI") as Phaser.Scene & {
       showAchievementToast?: (title: string, icon: string, reward: number) => void;
     };
     if (ui && typeof ui.showAchievementToast === "function") {
       ui.showAchievementToast(def.title, def.icon, def.rewardCoins);
+    }
+  }
+
+  private maybeHint(id: string) {
+    const ui = this.scene.get("UI") as Phaser.Scene & { tryHint?: (id: string) => void };
+    if (ui && typeof ui.tryHint === "function") {
+      // Delay so it doesn't collide with other toasts fired in the same frame.
+      this.time.delayedCall(400, () => ui.tryHint!(id));
     }
   }
 

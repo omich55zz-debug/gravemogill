@@ -36,6 +36,9 @@ const PAL: Pal = {
   petalRed: "#c73838",
   petalYellow: "#e6b94a",
   petalPurple: "#8a52b3",
+  petalOrange: "#e37a1f",
+  petalBlue: "#4a6fd6",
+  petalPink: "#e8a0c5",
   leaf: "#3d7a2e",
   leafDark: "#255018",
   skin: "#e0b894",
@@ -958,6 +961,239 @@ function clientPortrait(gender: "m" | "f", seed: number): HTMLCanvasElement {
   return canvas;
 }
 
+// ---------- New tombstones (celtic, broken, sarcophagus, angel-headstone) ----------
+
+function tombCeltic(): HTMLCanvasElement {
+  // Celtic cross: stone cross with a ring around the intersection, knotwork tint.
+  const { canvas, ctx } = makeCanvas(16, 22);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 21, 14, 1);
+  // Two-step base
+  rect(ctx, 2, 19, 12, 2, PAL.stoneDark);
+  rect(ctx, 2, 19, 12, 1, PAL.stone);
+  rect(ctx, 3, 18, 10, 1, PAL.stone);
+  // Vertical shaft
+  rect(ctx, 7, 3, 2, 15, PAL.stone);
+  rect(ctx, 7, 3, 1, 15, PAL.stoneLight);
+  rect(ctx, 8, 3, 1, 15, PAL.stoneDark);
+  // Horizontal arm
+  rect(ctx, 3, 8, 10, 2, PAL.stone);
+  rect(ctx, 3, 8, 10, 1, PAL.stoneLight);
+  // Ring around intersection
+  rect(ctx, 4, 6, 8, 1, PAL.stoneDark);
+  rect(ctx, 4, 11, 8, 1, PAL.stoneDark);
+  px(ctx, 3, 7, PAL.stoneDark); px(ctx, 12, 7, PAL.stoneDark);
+  px(ctx, 3, 10, PAL.stoneDark); px(ctx, 12, 10, PAL.stoneDark);
+  rect(ctx, 4, 7, 1, 4, PAL.stone);
+  rect(ctx, 11, 7, 1, 4, PAL.stone);
+  // Knot-pattern pixels (gold dots)
+  px(ctx, 7, 9, PAL.gold); px(ctx, 8, 9, PAL.gold);
+  px(ctx, 5, 2, PAL.stoneLight);
+  // Decorative tip
+  px(ctx, 7, 2, PAL.stoneLight); px(ctx, 8, 2, PAL.stoneLight);
+  // Moss
+  px(ctx, 2, 19, PAL.leafDark); px(ctx, 13, 20, PAL.leafDark);
+  return canvas;
+}
+
+function tombBroken(): HTMLCanvasElement {
+  // A broken, leaning tombstone — weathered with a crack running top to bottom.
+  const { canvas, ctx } = makeCanvas(16, 20);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 19, 14, 1);
+  // Base
+  rect(ctx, 1, 17, 14, 2, PAL.stoneDark);
+  rect(ctx, 1, 17, 14, 1, PAL.stone);
+  // Main slab, leaning right a bit
+  const slab: Array<[number, number, number]> = [
+    [3, 4, 10], [3, 5, 11], [3, 6, 11], [3, 7, 11],
+    [3, 8, 11], [3, 9, 11], [3, 10, 12], [3, 11, 12],
+    [3, 12, 12], [3, 13, 12], [3, 14, 13], [3, 15, 13], [3, 16, 13],
+  ];
+  for (const [x, y, w] of slab) rect(ctx, x, y, w, 1, PAL.stone);
+  // Shear break off top-right corner
+  px(ctx, 13, 4, PAL.stoneDark);
+  px(ctx, 13, 5, PAL.stoneDark);
+  px(ctx, 14, 6, PAL.stoneDark);
+  // Highlight and shadow
+  rect(ctx, 3, 4, 1, 13, PAL.stoneLight);
+  rect(ctx, 13, 9, 1, 7, PAL.stoneDark);
+  // Vertical crack
+  px(ctx, 8, 6, PAL.stoneDark);
+  px(ctx, 9, 7, PAL.stoneDark);
+  px(ctx, 8, 8, PAL.stoneDark);
+  px(ctx, 9, 10, PAL.stoneDark);
+  px(ctx, 8, 12, PAL.stoneDark);
+  px(ctx, 9, 14, PAL.stoneDark);
+  // Engraving — faint cross
+  rect(ctx, 7, 8, 2, 5, PAL.stoneDark);
+  rect(ctx, 5, 10, 6, 1, PAL.stoneDark);
+  // Moss at base
+  px(ctx, 2, 16, PAL.leafDark); px(ctx, 14, 17, PAL.leafDark);
+  px(ctx, 4, 15, PAL.leaf);
+  return canvas;
+}
+
+function tombSarcophagus(): HTMLCanvasElement {
+  // A raised sarcophagus coffin: rectangular box with lid and decorative band.
+  const { canvas, ctx } = makeCanvas(18, 18);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 17, 16, 1);
+  // Base (plinth)
+  rect(ctx, 1, 14, 16, 3, PAL.marbleDark);
+  rect(ctx, 1, 14, 16, 1, PAL.marble);
+  // Main box
+  rect(ctx, 2, 7, 14, 8, PAL.marble);
+  // Lid (slightly wider)
+  rect(ctx, 1, 5, 16, 3, PAL.marble);
+  rect(ctx, 1, 5, 16, 1, "#ebebf0");
+  rect(ctx, 1, 7, 16, 1, PAL.marbleDark);
+  // Shadow side
+  rect(ctx, 15, 7, 1, 8, PAL.marbleDark);
+  // Highlight side
+  rect(ctx, 2, 7, 1, 8, "#ebebf0");
+  // Decorative band (gold) with three rosettes
+  rect(ctx, 2, 10, 14, 2, PAL.gold);
+  rect(ctx, 2, 10, 14, 1, "#ffd36a");
+  px(ctx, 4, 11, PAL.brassDark);
+  px(ctx, 9, 11, PAL.brassDark);
+  px(ctx, 14, 11, PAL.brassDark);
+  // Cross medallion centered
+  rect(ctx, 8, 8, 2, 1, PAL.gold);
+  rect(ctx, 8, 9, 2, 1, PAL.gold);
+  px(ctx, 7, 8, PAL.gold); px(ctx, 10, 8, PAL.gold);
+  // Feet bumps
+  rect(ctx, 2, 17, 2, 1, PAL.marbleDark);
+  rect(ctx, 14, 17, 2, 1, PAL.marbleDark);
+  return canvas;
+}
+
+function tombAngelHead(): HTMLCanvasElement {
+  // An angel atop a large headstone base — mini statue-on-stone look.
+  const { canvas, ctx } = makeCanvas(18, 24);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 23, 14, 1);
+  // Pedestal (3 tiers)
+  rect(ctx, 1, 20, 16, 3, PAL.marbleDark);
+  rect(ctx, 1, 20, 16, 1, PAL.marble);
+  rect(ctx, 2, 17, 14, 3, PAL.marble);
+  rect(ctx, 2, 17, 14, 1, "#ebebf0");
+  rect(ctx, 15, 18, 1, 3, PAL.marbleDark);
+  // Central cross plaque
+  rect(ctx, 7, 14, 4, 6, "#d8d8df");
+  rect(ctx, 7, 14, 1, 6, "#ebebf0");
+  rect(ctx, 10, 14, 1, 6, PAL.marbleDark);
+  rect(ctx, 8, 15, 2, 4, PAL.gold);
+  rect(ctx, 7, 16, 4, 1, PAL.gold);
+  // Angel figure atop
+  // wings (spread)
+  rect(ctx, 3, 9, 4, 1, PAL.marbleDark);
+  rect(ctx, 2, 10, 5, 1, "#ebebf0");
+  rect(ctx, 3, 11, 4, 1, PAL.marble);
+  rect(ctx, 11, 9, 4, 1, PAL.marbleDark);
+  rect(ctx, 11, 10, 5, 1, "#ebebf0");
+  rect(ctx, 11, 11, 4, 1, PAL.marble);
+  // Halo
+  rect(ctx, 7, 2, 4, 1, PAL.gold);
+  px(ctx, 6, 3, PAL.gold); px(ctx, 11, 3, PAL.gold);
+  rect(ctx, 7, 4, 4, 1, PAL.gold);
+  // Head
+  rect(ctx, 8, 5, 2, 2, "#f3ddc2");
+  // Body/robe
+  rect(ctx, 7, 7, 4, 4, PAL.marble);
+  rect(ctx, 7, 7, 1, 4, "#ebebf0");
+  rect(ctx, 10, 7, 1, 4, PAL.marbleDark);
+  // Sash (gold)
+  rect(ctx, 7, 9, 4, 1, PAL.gold);
+  // Feet
+  rect(ctx, 7, 11, 4, 2, PAL.marbleDark);
+  return canvas;
+}
+
+// ---------- New flowers (orange, blue, pink) ----------
+// The existing flower() helper is generic; we just pass new palette colours.
+
+// ---------- Decorations: wreath, candle, bible ----------
+
+function decorWreath(): HTMLCanvasElement {
+  // A circular funeral wreath — green with coloured flowers scattered.
+  const { canvas, ctx } = makeCanvas(16, 16);
+  // Shadow
+  px(ctx, 8, 14, PAL.shadow); px(ctx, 9, 14, PAL.shadow);
+  // Ring
+  const ring = [
+    [6, 3], [7, 3], [8, 3], [9, 3],
+    [4, 4], [5, 4], [10, 4], [11, 4],
+    [3, 5], [12, 5],
+    [3, 6], [12, 6],
+    [3, 7], [12, 7],
+    [3, 8], [12, 8],
+    [3, 9], [12, 9],
+    [4, 10], [5, 10], [10, 10], [11, 10],
+    [6, 11], [7, 11], [8, 11], [9, 11],
+  ];
+  for (const [x, y] of ring) px(ctx, x, y, PAL.leaf);
+  // Darker underside
+  for (const [x, y] of ring) if (y > 7) px(ctx, x, y, PAL.leafDark);
+  // Leaf highlights (lighter)
+  px(ctx, 5, 4, "#69923a");
+  px(ctx, 10, 4, "#69923a");
+  px(ctx, 4, 5, "#69923a");
+  // Scattered flowers: red, white, yellow, purple
+  px(ctx, 6, 5, PAL.petalRed);
+  px(ctx, 11, 7, PAL.petalYellow);
+  px(ctx, 4, 8, PAL.petalWhite);
+  px(ctx, 9, 10, PAL.petalPurple);
+  px(ctx, 8, 4, PAL.petalPink);
+  // Black ribbon at the bottom
+  rect(ctx, 6, 12, 4, 2, "#1a1a22");
+  px(ctx, 5, 13, "#1a1a22"); px(ctx, 10, 13, "#1a1a22");
+  px(ctx, 6, 12, "#444");
+  return canvas;
+}
+
+function decorCandle(): HTMLCanvasElement {
+  // A large candle with a glass holder at the base and a flickering flame.
+  const { canvas, ctx } = makeCanvas(10, 16);
+  // Base holder (glass)
+  rect(ctx, 2, 13, 6, 2, "#556066");
+  rect(ctx, 2, 13, 6, 1, "#7e8a92");
+  px(ctx, 2, 15, PAL.shadow); px(ctx, 7, 15, PAL.shadow);
+  // Candle column
+  rect(ctx, 3, 4, 4, 9, PAL.petalWhite);
+  rect(ctx, 3, 4, 1, 9, "#fffbea");
+  rect(ctx, 6, 4, 1, 9, "#c9c5a8");
+  // Wax drips
+  px(ctx, 3, 7, "#fffbea"); px(ctx, 6, 9, "#c9c5a8");
+  // Wick
+  px(ctx, 5, 3, "#2a1a10");
+  // Flame
+  px(ctx, 5, 2, PAL.flame);
+  px(ctx, 4, 1, PAL.flame); px(ctx, 5, 1, PAL.flameCore); px(ctx, 6, 1, PAL.flame);
+  px(ctx, 5, 0, PAL.flame);
+  // Glow hint
+  px(ctx, 4, 2, PAL.flame); px(ctx, 6, 2, PAL.flame);
+  return canvas;
+}
+
+function decorBible(): HTMLCanvasElement {
+  // A closed book with a cross on the cover and a red ribbon bookmark.
+  const { canvas, ctx } = makeCanvas(12, 10);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 9, 10, 1);
+  // Back cover (burgundy)
+  rect(ctx, 1, 2, 10, 7, "#4a1820");
+  rect(ctx, 1, 2, 10, 1, "#6b2a32");
+  // Pages (side)
+  rect(ctx, 2, 3, 1, 6, "#e8dbb2");
+  rect(ctx, 9, 3, 1, 6, "#e8dbb2");
+  // Front face shading
+  rect(ctx, 3, 2, 8, 1, "#5a202a");
+  // Spine shadow
+  rect(ctx, 1, 3, 1, 6, "#2a0e14");
+  // Gold cross embossed
+  rect(ctx, 6, 4, 1, 4, PAL.gold);
+  rect(ctx, 5, 5, 3, 1, PAL.gold);
+  // Red ribbon
+  rect(ctx, 8, 8, 1, 2, "#c73838");
+  return canvas;
+}
+
 // ---------- Registration ----------
 
 export function generateAllTextures(scene: Phaser.Scene) {
@@ -978,13 +1214,24 @@ export function generateAllTextures(scene: Phaser.Scene) {
   // Items by sprite key declared in catalog.
   register(scene, "tomb_wood", tombWood());
   register(scene, "tomb_stone", tombStone());
+  register(scene, "tomb_celtic", tombCeltic());
+  register(scene, "tomb_broken", tombBroken());
   register(scene, "tomb_marble", tombMarble());
+  register(scene, "tomb_sarcophagus", tombSarcophagus());
   register(scene, "tomb_obelisk", tombObelisk());
+  register(scene, "tomb_angel", tombAngelHead());
 
   register(scene, "flower_white", flower(PAL.petalWhite));
   register(scene, "flower_red", flower(PAL.petalRed));
   register(scene, "flower_yellow", flower(PAL.petalYellow));
   register(scene, "flower_purple", flower(PAL.petalPurple));
+  register(scene, "flower_orange", flower(PAL.petalOrange));
+  register(scene, "flower_blue", flower(PAL.petalBlue));
+  register(scene, "flower_pink", flower(PAL.petalPink));
+
+  register(scene, "decor_wreath", decorWreath());
+  register(scene, "decor_candle", decorCandle());
+  register(scene, "decor_bible", decorBible());
 
   register(scene, "fence_wood", fenceWood());
   register(scene, "fence_iron", fenceIron());

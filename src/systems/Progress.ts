@@ -99,6 +99,27 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     icon: "✧",
     rewardCoins: 200,
   },
+  {
+    id: "rare_crystal",
+    title: "Редкая находка",
+    description: "Кошка нашла редкий фиолетовый кристалл.",
+    icon: "❖",
+    rewardCoins: 150,
+  },
+  {
+    id: "three_perfect",
+    title: "Безупречный гробовщик",
+    description: "Сдать 3 заказа с вердиктом «Идеально!».",
+    icon: "❀",
+    rewardCoins: 150,
+  },
+  {
+    id: "twenty_graves",
+    title: "Мастер некрополя",
+    description: "Сдать 20 заказов.",
+    icon: "☠",
+    rewardCoins: 400,
+  },
 ];
 
 // Daily rewards: escalate during a streak, reset if a day is missed.

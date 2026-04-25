@@ -6,6 +6,8 @@ import type { OrderSystem, Order } from "../systems/OrderSystem";
 import { CATALOG, type ItemCategory } from "../data/catalog";
 import type { Cell } from "../utils/grid";
 import { portraitKey } from "../utils/sprites";
+import { tutorial } from "../systems/Tutorial";
+import { audio } from "../systems/Audio";
 
 /**
  * Parallel HUD scene. Draws everything in screen-space (Phaser at natural resolution).
@@ -79,6 +81,74 @@ export class UIScene extends Phaser.Scene {
     this.refreshHud();
     this.refreshActiveOrders();
     this.maybeShowOrderOffer();
+
+    // Mute toggle button (top-right of HUD, just left of the hint text).
+    this.createMuteButton();
+
+    // Tutorial kickoff — welcome hint fires on first ever session.
+    this.time.delayedCall(400, () => this.tryHint("welcome"));
+
+    // Tutorial hooks on gameplay events (each hint fires at most once, ever).
+    this.orders.on("offered", () => this.tryHint("accept_order"));
+    this.orders.on("accepted", () => {
+      this.tryHint("dig_grave");
+      this.tryHint("cat");
+    });
+  }
+
+  /** Public: convenience for GameScene to fire hints from outside. */
+  tryHint(id: string) {
+    const hint = tutorial.trigger(id as Parameters<typeof tutorial.trigger>[0]);
+    if (!hint) return;
+    this.showHintToast(hint.title, hint.text);
+  }
+
+  private showHintToast(title: string, text: string) {
+    const { width, height } = this.scale;
+    const w = Math.min(420, width - 32);
+    const h = 104;
+    const x = (width - w) / 2;
+    const y = height - h - 100;
+    const container = this.add.container(0, 0).setDepth(9500);
+    const panel = this.add.rectangle(x, y, w, h, 0x10141c, 0.96).setOrigin(0, 0);
+    panel.setStrokeStyle(2, 0x6a8fc4);
+    const titleText = this.add.text(x + 14, y + 10, "☞  " + title, {
+      fontFamily: "serif", fontSize: "18px", color: "#cfe2ff", fontStyle: "bold",
+    });
+    const body = this.add.text(x + 14, y + 34, text, {
+      fontFamily: "serif", fontSize: "14px", color: "#e8e1cf",
+      wordWrap: { width: w - 28 },
+    });
+    container.add([panel, titleText, body]);
+    container.setAlpha(0);
+    this.tweens.add({ targets: container, alpha: 1, duration: 250, ease: "Quad.Out" });
+    this.tweens.add({
+      targets: container, alpha: 0, delay: 6500, duration: 500,
+      onComplete: () => container.destroy(),
+    });
+    // Allow tap-to-dismiss early.
+    panel.setInteractive({ useHandCursor: true });
+    panel.on("pointerup", () => {
+      this.tweens.killTweensOf(container);
+      container.destroy();
+    });
+  }
+
+  private createMuteButton() {
+    const size = 36;
+    const x = this.scale.width - size - 12;
+    const y = 14;
+    const container = this.add.container(0, 0).setDepth(9000);
+    const circle = this.add.circle(x + size / 2, y + size / 2, size / 2, 0x1b151f, 0.9)
+      .setStrokeStyle(2, 0x8c6a36).setInteractive({ useHandCursor: true });
+    const icon = this.add.text(x + size / 2, y + size / 2, audio.muted ? "🔇" : "🔊", {
+      fontFamily: "sans-serif", fontSize: "18px", color: "#f0e7c8",
+    }).setOrigin(0.5);
+    container.add([circle, icon]);
+    circle.on("pointerup", () => {
+      const muted = audio.toggleMuted();
+      icon.setText(muted ? "🔇" : "🔊");
+    });
   }
 
   // -------------- HUD --------------
