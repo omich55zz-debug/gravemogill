@@ -1194,6 +1194,50 @@ function decorBible(): HTMLCanvasElement {
   return canvas;
 }
 
+// ---------- Zombie sprite ----------
+
+function zombieSprite(): HTMLCanvasElement {
+  // Classic shambling zombie: greenish skin, torn coat, glowing eyes.
+  const { canvas, ctx } = makeCanvas(12, 16);
+  // Shadow under feet
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 15, 8, 1);
+  // Feet (old boots)
+  rect(ctx, 3, 14, 2, 2, "#1a1a22");
+  rect(ctx, 7, 14, 2, 2, "#1a1a22");
+  // Trousers (torn)
+  rect(ctx, 3, 11, 6, 3, "#3b2c2c");
+  px(ctx, 4, 13, "#2a1f1f"); px(ctx, 7, 13, "#2a1f1f");
+  // Torn coat body
+  rect(ctx, 3, 7, 6, 5, "#4a3c22");
+  rect(ctx, 3, 7, 1, 5, "#2f2614");
+  rect(ctx, 8, 7, 1, 5, "#2f2614");
+  // Rips
+  px(ctx, 5, 10, "#2a2014");
+  px(ctx, 6, 9, "#2a2014");
+  // Neck
+  rect(ctx, 5, 6, 2, 1, "#6b8a4a");
+  // Head (green-grey)
+  rect(ctx, 4, 2, 4, 4, "#8aac5e");
+  rect(ctx, 4, 2, 4, 1, "#75964d");
+  rect(ctx, 4, 5, 4, 1, "#6e8a48");
+  // Hair/stubble
+  px(ctx, 4, 1, "#2a1a10"); px(ctx, 5, 1, "#2a1a10");
+  px(ctx, 6, 1, "#2a1a10"); px(ctx, 7, 1, "#2a1a10");
+  px(ctx, 4, 0, "#2a1a10");
+  // Glowing eyes (cyan)
+  px(ctx, 5, 4, "#8ffff0");
+  px(ctx, 6, 4, "#8ffff0");
+  // Gaping mouth
+  rect(ctx, 5, 5, 2, 1, "#2a0814");
+  // Arms stretched out
+  rect(ctx, 2, 8, 1, 4, "#6e8a48");
+  rect(ctx, 9, 8, 1, 4, "#6e8a48");
+  // Hands
+  rect(ctx, 2, 11, 1, 1, "#8aac5e");
+  rect(ctx, 9, 11, 1, 1, "#8aac5e");
+  return canvas;
+}
+
 // ---------- Registration ----------
 
 export function generateAllTextures(scene: Phaser.Scene) {
@@ -1210,6 +1254,7 @@ export function generateAllTextures(scene: Phaser.Scene) {
   register(scene, "player", playerSprite());
   register(scene, "cat", catSprite());
   register(scene, "crystal", crystalSprite());
+  register(scene, "zombie", zombieSprite());
 
   // Items by sprite key declared in catalog.
   register(scene, "tomb_wood", tombWood());

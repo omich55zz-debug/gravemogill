@@ -3,6 +3,7 @@ import { CONFIG, WORLD_W, WORLD_H } from "../data/config";
 import { Grid, type Cell } from "../utils/grid";
 import { Player } from "../entities/Player";
 import { Cat } from "../entities/Cat";
+import { Zombie } from "../entities/Zombie";
 import { Economy } from "../systems/Economy";
 import { TimeSystem } from "../systems/TimeSystem";
 import { OrderSystem, type Order } from "../systems/OrderSystem";
@@ -32,6 +33,8 @@ export class GameScene extends Phaser.Scene {
 
   player!: Player;
   cat!: Cat;
+  private zombies: Zombie[] = [];
+  private zombieSpawnCooldown = 0; // ms — wait before next spawn attempt
 
   // Rendering layers
   layerTerrain!: Phaser.GameObjects.Container;
@@ -212,6 +215,16 @@ export class GameScene extends Phaser.Scene {
       this.player.sprite.x = Phaser.Math.Clamp(this.player.sprite.x, 8, WORLD_W - 8);
       this.player.sprite.y = Phaser.Math.Clamp(this.player.sprite.y, 10, WORLD_H - 2);
       this.cat.update(dt, this.player.x, this.player.y);
+      for (const z of this.zombies) z.update(dt, this.player.x, this.player.y);
+    }
+    this.zombies = this.zombies.filter(z => !z.dead);
+
+    // Zombie spawning: at night (22:00-05:00), chance every few seconds if
+    // there's at least one completed grave and fewer than 2 zombies on screen.
+    this.zombieSpawnCooldown -= deltaMs;
+    if (this.zombieSpawnCooldown <= 0 && !this.uiModalOpen) {
+      this.zombieSpawnCooldown = 4000 + Math.random() * 4000;
+      this.maybeSpawnZombie();
     }
 
     // Focused cell = tile the player is currently standing on
@@ -258,8 +271,60 @@ export class GameScene extends Phaser.Scene {
 
   /** Called by SPACE/E or the on-screen button. Opens a context menu on the UI scene for the focused cell. */
   triggerAction() {
-    if (this.uiModalOpen || !this.focusedCell) return;
+    if (this.uiModalOpen) return;
+    // If there's a zombie within whacking range, dispel it instead of
+    // opening the context menu.
+    const hit = this.zombies
+      .filter(z => !z.dead && z.distanceTo(this.player.x, this.player.y) < 14)
+      .sort((a, b) => a.distanceTo(this.player.x, this.player.y) - b.distanceTo(this.player.x, this.player.y))[0];
+    if (hit) {
+      hit.dispel(true);
+      return;
+    }
+    if (!this.focusedCell) return;
     this.scene.get("UI").events.emit("openContext", this.focusedCell);
+  }
+
+  /** Spawn a zombie at a random completed grave if conditions are right. */
+  private maybeSpawnZombie() {
+    if (this.zombies.length >= 2) return;
+    const hour = this.gameTime.hour;
+    // Night only: 20:00 onwards (day ends at 24:00 in-game).
+    const isNight = hour >= 20;
+    if (!isNight) return;
+    // Gather completed graves.
+    const candidates: Array<{ col: number; row: number }> = [];
+    for (const [key, v] of this.graveVisuals.entries()) {
+      if (!v.completed) continue;
+      const [cs, rs] = key.split(",");
+      const col = parseInt(cs, 10);
+      const row = parseInt(rs, 10);
+      if (!Number.isFinite(col) || !Number.isFinite(row)) continue;
+      candidates.push({ col, row });
+    }
+    if (candidates.length === 0) return;
+    // 40% chance per attempt.
+    if (Math.random() > 0.4) return;
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    const { x, y } = this.grid.tileToWorldCenter(pick.col, pick.row);
+    const z = new Zombie(this, x, y + 4);
+    this.zombies.push(z);
+    audio.play("zombieRise");
+    z.on("dispelled", (byPlayer: boolean, zx: number, zy: number) => {
+      if (byPlayer) {
+        const reward = Phaser.Math.Between(30, 80);
+        this.economy.earn(reward);
+        audio.play("zombieHit");
+        audio.play("coin");
+        this.showFloatText(`Упокоен +${reward}₽`, zx, zy, "#a0ffc5");
+        this.tryUnlock("first_zombie");
+        const n = progress.bump("zombiesDispelled");
+        if (n >= 5) this.tryUnlock("zombie_hunter");
+      } else {
+        audio.play("zombieGone");
+        this.showFloatText("Рассыпался в прах", zx, zy, "#a0b6a0");
+      }
+    });
   }
 
   /** Dig a grave on a plot cell (cost applied). */

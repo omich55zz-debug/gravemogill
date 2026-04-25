@@ -120,6 +120,20 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     icon: "☠",
     rewardCoins: 400,
   },
+  {
+    id: "first_zombie",
+    title: "Восстание из праха",
+    description: "Упокоить первого восставшего зомби.",
+    icon: "☒",
+    rewardCoins: 50,
+  },
+  {
+    id: "zombie_hunter",
+    title: "Укротитель восставших",
+    description: "Упокоить 5 зомби.",
+    icon: "✞",
+    rewardCoins: 200,
+  },
 ];
 
 // Daily rewards: escalate during a streak, reset if a day is missed.

@@ -21,7 +21,10 @@ type SoundName =
   | "click"
   | "footstep"
   | "success"
-  | "fail";
+  | "fail"
+  | "zombieRise"
+  | "zombieGone"
+  | "zombieHit";
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -118,6 +121,20 @@ class AudioEngine {
         break;
       case "fail":
         this.toneChain(ctx, [330, 247, 196], [0.1, 0.1, 0.2], "sawtooth", 0.25);
+        break;
+      case "zombieRise":
+        // Low rumble with rising pitch — earth splitting open.
+        this.toneChain(ctx, [80, 110, 140, 175], [0.12, 0.12, 0.12, 0.25], "sawtooth", 0.22);
+        this.noiseHit(ctx, 0.4, 180, 60, 0.22);
+        break;
+      case "zombieGone":
+        // Muffled puff of dust.
+        this.noiseHit(ctx, 0.25, 900, 200, 0.2);
+        break;
+      case "zombieHit":
+        // Sharp whack — shovel meets skull.
+        this.noiseHit(ctx, 0.12, 600, 100, 0.4);
+        this.toneChain(ctx, [180, 130], [0.05, 0.08], "square", 0.18);
         break;
     }
   }
