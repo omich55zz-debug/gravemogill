@@ -274,24 +274,75 @@ export class UIScene extends Phaser.Scene {
     const next = this.orders.pending[0];
     if (!next) return;
     this.orderOfferPanel = this.makeOrderOfferPanel(next);
+    // Re-layout on viewport resize so the card keeps its ~45% width cap.
+    const handler = () => this.maybeShowOrderOffer();
+    this.scale.once("resize", handler);
   }
 
   private makeOrderOfferPanel(order: Order): Phaser.GameObjects.Container {
-    const c = this.add.container(16, 76);
-    const bg = this.add.rectangle(0, 0, 240, 150, 0x1a1422, 0.95).setStrokeStyle(1, 0x8c6a36).setOrigin(0, 0);
-    const title = this.add.text(8, 6, "Новый заказ", { fontFamily: "serif", fontSize: "14px", color: "#d7c78b" });
-    const portrait = this.add.image(16, 30, portraitKey(order.gender, order.portraitIdx)).setOrigin(0, 0).setScale(1.8);
-    const name = this.add.text(60, 28, shorten(order.deceasedName, 20), { fontFamily: "serif", fontSize: "12px", color: "#e8e1cf" });
+    // Responsive sizing: never wider than 45% of screen, but not smaller than 200px.
+    const W = Math.max(200, Math.min(240, Math.round(this.scale.width * 0.45)));
+    const H = 120;
+    const PAD = 6;
+    const c = this.add.container(12, 72);
+    const bg = this.add.rectangle(0, 0, W, H, 0x1a1422, 0.96)
+      .setStrokeStyle(1, 0x8c6a36).setOrigin(0, 0);
+    const title = this.add.text(PAD, 4, "Новый заказ", {
+      fontFamily: "serif", fontSize: "12px", color: "#d7c78b",
+    });
+    // Portrait: smaller (scale 1.2 instead of 1.8) to leave room for text.
+    const portrait = this.add.image(PAD, 22, portraitKey(order.gender, order.portraitIdx))
+      .setOrigin(0, 0).setScale(1.2);
     const tierRus = order.tier === "modest" ? "Скромный" : order.tier === "decent" ? "Достойный" : "Пышный";
-    const meta = this.add.text(60, 44, `${tierRus}\n₽${order.budget}  /  ${order.daysAllowed} дн.\nРоскошь ${order.minLuxury}–${order.maxLuxury}`, { fontFamily: "serif", fontSize: "10px", color: "#a29680" });
-    const flavor = this.add.text(8, 92, shorten(order.flavor, 60), { fontFamily: "serif", fontSize: "10px", color: "#9a8f72", wordWrap: { width: 224 } });
-    c.add([bg, title, portrait, name, meta, flavor]);
+    const textX = PAD + 42;
+    const textW = W - textX - PAD;
+    const name = this.add.text(textX, 22, shorten(order.deceasedName, 18), {
+      fontFamily: "serif", fontSize: "11px", color: "#e8e1cf",
+      wordWrap: { width: textW },
+    });
+    const meta = this.add.text(textX, 38, `${tierRus} · ₽${order.budget} · ${order.daysAllowed}дн.`, {
+      fontFamily: "serif", fontSize: "9px", color: "#a29680",
+    });
+    const lux = this.add.text(textX, 50, `Роскошь ${order.minLuxury}–${order.maxLuxury}`, {
+      fontFamily: "serif", fontSize: "9px", color: "#a29680",
+    });
+    const flavor = this.add.text(PAD, 68, shorten(order.flavor, 80), {
+      fontFamily: "serif", fontSize: "9px", color: "#9a8f72",
+      wordWrap: { width: W - PAD * 2 },
+    });
+    c.add([bg, title, portrait, name, meta, lux, flavor]);
 
-    const acceptBg = this.add.rectangle(60, 132, 100, 24, 0x4a3a20).setStrokeStyle(1, 0xd7c78b);
-    const acceptLabel = this.add.text(60, 132, "Принять", { fontFamily: "serif", fontSize: "12px", color: "#f0e7c8" }).setOrigin(0.5);
-    const declineBg = this.add.rectangle(180, 132, 100, 24, 0x3a2020).setStrokeStyle(1, 0x8c4a36);
-    const declineLabel = this.add.text(180, 132, "Отказать", { fontFamily: "serif", fontSize: "12px", color: "#ffd7c8" }).setOrigin(0.5);
+    // Buttons along the bottom, sharing the full width.
+    const btnW = Math.floor((W - PAD * 3) / 2);
+    const btnY = H - 16;
+    const acceptBg = this.add.rectangle(PAD + btnW / 2, btnY, btnW, 22, 0x4a3a20)
+      .setStrokeStyle(1, 0xd7c78b);
+    const acceptLabel = this.add.text(PAD + btnW / 2, btnY, "Принять", {
+      fontFamily: "serif", fontSize: "11px", color: "#f0e7c8",
+    }).setOrigin(0.5);
+    const declineX = PAD * 2 + btnW + btnW / 2;
+    const declineBg = this.add.rectangle(declineX, btnY, btnW, 22, 0x3a2020)
+      .setStrokeStyle(1, 0x8c4a36);
+    const declineLabel = this.add.text(declineX, btnY, "Отказать", {
+      fontFamily: "serif", fontSize: "11px", color: "#ffd7c8",
+    }).setOrigin(0.5);
     c.add([acceptBg, acceptLabel, declineBg, declineLabel]);
+
+    // Small collapse toggle in the top-right corner.
+    const foldBg = this.add.circle(W - 10, 10, 7, 0x2a1f2f).setStrokeStyle(1, 0x8c6a36);
+    const foldLbl = this.add.text(W - 10, 10, "—", {
+      fontFamily: "sans-serif", fontSize: "10px", color: "#d7c78b",
+    }).setOrigin(0.5);
+    c.add([foldBg, foldLbl]);
+    let collapsed = false;
+    foldBg.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+      collapsed = !collapsed;
+      for (const obj of [portrait, name, meta, lux, flavor, acceptBg, acceptLabel, declineBg, declineLabel]) {
+        (obj as Phaser.GameObjects.GameObject & { visible: boolean }).visible = !collapsed;
+      }
+      (bg as Phaser.GameObjects.Rectangle).height = collapsed ? 22 : H;
+      foldLbl.setText(collapsed ? "+" : "—");
+    });
 
     acceptBg.setInteractive({ useHandCursor: true }).on("pointerup", () => {
       this.orders.accept(order);
@@ -554,11 +605,19 @@ export class UIScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0, 0).setInteractive();
     const c = this.add.container(width / 2, height / 2);
-    const card = this.add.rectangle(0, 0, 560, 380, 0x0f0d18, 0.98).setStrokeStyle(2, 0x8c6a36);
+    // Cap modal to 92% of viewport so it never runs off-screen on phones.
+    const cardW = Math.min(560, Math.max(260, Math.floor(width * 0.92)));
+    const cardH = Math.min(380, Math.max(260, Math.floor(height * 0.88)));
+    const card = this.add.rectangle(0, 0, cardW, cardH, 0x0f0d18, 0.98)
+      .setStrokeStyle(2, 0x8c6a36);
     c.add(card);
     draw(c);
-    const closeBg = this.add.circle(270, -170, 16, 0x4a2020).setStrokeStyle(1, 0x8c4a36);
-    const closeLbl = this.add.text(270, -170, "✕", { fontFamily: "serif", fontSize: "18px", color: "#ffd7c8" }).setOrigin(0.5);
+    // Place close button relative to the card dimensions so it stays visible.
+    const closeBg = this.add.circle(cardW / 2 - 10, -cardH / 2 + 10, 16, 0x4a2020)
+      .setStrokeStyle(1, 0x8c4a36);
+    const closeLbl = this.add.text(cardW / 2 - 10, -cardH / 2 + 10, "✕", {
+      fontFamily: "serif", fontSize: "18px", color: "#ffd7c8",
+    }).setOrigin(0.5);
     c.add([closeBg, closeLbl]);
     closeBg.setInteractive({ useHandCursor: true }).on("pointerup", () => this.closeModal());
     this.modal = c;
