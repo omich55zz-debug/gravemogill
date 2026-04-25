@@ -195,9 +195,10 @@ export class ThreeWorld {
       s = (s * 1103515245 + 12345) & 0x7fffffff;
       return s / 0x7fffffff;
     };
-    // Trees — bias to the border of the map (first/last 2 cols/rows).
-    const treeVariants: Array<"oak" | "sakura" | "pine"> = ["oak", "oak", "sakura", "sakura", "pine"];
-    for (let i = 0; i < 28; i++) {
+    // Trees — bias to the border of the map. Gothic mix: mostly gnarled
+    // dead oaks, peppered with dark pines.
+    const treeVariants: Array<"dead" | "pine"> = ["dead", "dead", "dead", "pine", "dead", "pine"];
+    for (let i = 0; i < 32; i++) {
       for (let tries = 0; tries < 30; tries++) {
         const onEdge = rnd() < 0.7;
         const c = onEdge

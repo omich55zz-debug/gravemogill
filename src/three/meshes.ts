@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   marbleTexture, graniteTexture, woodTexture, ironTexture,
   roughStoneTexture, roofTexture, earthTexture, leavesTexture, waterTexture,
+  stainedGlassTexture, runesEmissiveTexture,
 } from "./textures";
 
 // Shared material instances — created on first access so canvases are ready.
@@ -163,6 +164,21 @@ export function tombMarble(): THREE.Group {
   const top = mkMesh(new THREE.BoxGeometry(0.9, 0.15, 0.3), marble);
   top.position.y = 1.4;
   g.add(top);
+  // Glowing arcane runes on the front face
+  const runeTex = runesEmissiveTexture();
+  const runes = mkMesh(
+    new THREE.PlaneGeometry(0.6, 0.5),
+    new THREE.MeshStandardMaterial({
+      map: runeTex,
+      emissive: 0xffffff,
+      emissiveMap: runeTex,
+      emissiveIntensity: 1.1,
+      transparent: true,
+      roughness: 0.6,
+    })
+  );
+  runes.position.set(0, 0.8, 0.128);
+  g.add(runes);
   return g;
 }
 
@@ -334,14 +350,54 @@ export function buildingChapel(): THREE.Group {
   const door = mkMesh(new THREE.BoxGeometry(0.9, 1.8, 0.1), new THREE.MeshStandardMaterial({ color: 0x3a1a12, roughness: 0.7 }));
   door.position.set(0, 1.25, 1.37);
   g.add(door);
-  // Rose window
-  const rose = mkMesh(new THREE.TorusGeometry(0.35, 0.06, 6, 16), brass);
-  rose.position.set(0, 2.6, 1.38);
+  // Rose window — brass lead frame + glowing stained glass.
+  const rose = mkMesh(new THREE.TorusGeometry(0.5, 0.07, 6, 20), brass);
+  rose.position.set(0, 2.5, 1.38);
   rose.rotation.x = Math.PI / 2;
   g.add(rose);
-  const roseInner = mkMesh(new THREE.CircleGeometry(0.3, 16), new THREE.MeshStandardMaterial({ color: 0x4a8acc, roughness: 0.1, emissive: 0x1a3a5c, emissiveIntensity: 0.5 }));
-  roseInner.position.set(0, 2.6, 1.38);
+  const stainedMap = stainedGlassTexture();
+  const roseInner = mkMesh(
+    new THREE.CircleGeometry(0.48, 24),
+    new THREE.MeshStandardMaterial({
+      map: stainedMap,
+      emissive: 0xffffff,
+      emissiveMap: stainedMap,
+      emissiveIntensity: 1.6,
+      roughness: 0.25,
+      side: THREE.DoubleSide,
+    })
+  );
+  roseInner.position.set(0, 2.5, 1.39);
   g.add(roseInner);
+
+  // Two tall narrow stained-glass side windows
+  const sideWinMat = new THREE.MeshStandardMaterial({
+    map: stainedMap,
+    emissive: 0xffffff,
+    emissiveMap: stainedMap,
+    emissiveIntensity: 1.3,
+    roughness: 0.3,
+    side: THREE.DoubleSide,
+  });
+  for (const xOff of [-1.1, 1.1]) {
+    const win = mkMesh(new THREE.PlaneGeometry(0.5, 1.2), sideWinMat);
+    win.position.set(xOff, 1.85, 1.38);
+    g.add(win);
+    // Brass lead-frame
+    const frame = mkMesh(new THREE.BoxGeometry(0.55, 1.25, 0.04), brass);
+    frame.position.set(xOff, 1.85, 1.37);
+    g.add(frame);
+  }
+
+  // Warm interior light glow seeping through the rose window (gives the
+  // chapel a "someone is inside" feel).
+  const chapelGlow = new THREE.PointLight(0xffa84a, 1.4, 7, 1.5);
+  chapelGlow.position.set(0, 2.5, 1.5);
+  g.add(chapelGlow);
+  const chapelGlow2 = new THREE.PointLight(0xffa84a, 0.6, 4, 1.8);
+  chapelGlow2.position.set(0, 1.8, 1.5);
+  g.add(chapelGlow2);
+
   return g;
 }
 
@@ -801,64 +857,99 @@ export function graveHole(): THREE.Group {
 // ---------------- Trees ----------------
 
 /**
- * Procedural tree: trunk, a few branches, dense canopy of small leaf-quads.
- * variant: "oak" (green) | "sakura" (pink) | "pine" (dark green).
+ * Procedural tree. Dark gothic variants only:
+ *   "dead"  — gnarled dead oak, bare twisted branches, no canopy
+ *   "pine"  — dark spruce, narrow deep-green canopy
+ *   "oak"   — deprecated alias → "dead"
+ *   "sakura"— deprecated alias → "dead"
  */
-export function tree(variant: "oak" | "sakura" | "pine" = "oak"): THREE.Group {
+export function tree(variant: "oak" | "sakura" | "pine" | "dead" = "dead"): THREE.Group {
   const g = new THREE.Group();
-  const trunkMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x5a3e22, roughness: 0.95 });
-  const trunkH = 2.4 + Math.random() * 0.8;
-  const trunk = mkMesh(new THREE.CylinderGeometry(0.12, 0.18, trunkH, 8), trunkMat);
+  // Map old color-variants to the gothic set.
+  const kind: "dead" | "pine" = variant === "pine" ? "pine" : "dead";
+
+  const trunkMat = new THREE.MeshStandardMaterial({
+    map: woodTexture(),
+    color: kind === "dead" ? 0x1e1510 : 0x2a1e14,
+    roughness: 0.95,
+  });
+  const trunkH = kind === "pine" ? 3.2 + Math.random() * 0.8 : 2.6 + Math.random() * 0.8;
+  const trunk = mkMesh(new THREE.CylinderGeometry(0.12, 0.22, trunkH, 8), trunkMat);
   trunk.position.y = trunkH / 2;
   g.add(trunk);
-  // Main branches (cones)
-  for (let i = 0; i < 3; i++) {
-    const br = mkMesh(new THREE.CylinderGeometry(0.04, 0.08, 0.6, 5), trunkMat);
-    const a = (i / 3) * Math.PI * 2 + Math.random() * 0.6;
-    br.position.set(Math.cos(a) * 0.25, trunkH * 0.75, Math.sin(a) * 0.25);
-    br.rotation.z = Math.cos(a) * 0.8;
-    br.rotation.x = Math.sin(a) * 0.8;
-    g.add(br);
+
+  if (kind === "dead") {
+    // Gnarled bare branches — many twisted sticks at different heights.
+    const branchMat = trunkMat;
+    const branchCount = 8 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < branchCount; i++) {
+      const yBase = trunkH * (0.45 + (i / branchCount) * 0.55);
+      const a = (i / branchCount) * Math.PI * 2 + Math.random() * 1.2;
+      const len = 0.8 + Math.random() * 0.9;
+      const br = mkMesh(new THREE.CylinderGeometry(0.025, 0.06, len, 5), branchMat);
+      // Position pivot at the base of the branch
+      const baseR = 0.16;
+      br.position.set(Math.cos(a) * baseR, yBase + len * 0.25, Math.sin(a) * baseR);
+      br.rotation.z = -Math.cos(a) * (0.9 + Math.random() * 0.4);
+      br.rotation.x = Math.sin(a) * (0.9 + Math.random() * 0.4);
+      g.add(br);
+
+      // A secondary twig off the end
+      if (Math.random() < 0.7) {
+        const twig = mkMesh(new THREE.CylinderGeometry(0.015, 0.028, 0.4 + Math.random() * 0.3, 4), branchMat);
+        const tipX = Math.cos(a) * (baseR + len * 0.5);
+        const tipZ = Math.sin(a) * (baseR + len * 0.5);
+        const tipY = yBase + len * 0.5;
+        twig.position.set(tipX, tipY + 0.15, tipZ);
+        twig.rotation.z = -Math.cos(a + 0.4) * 1.1;
+        twig.rotation.x = Math.sin(a + 0.4) * 1.1;
+        g.add(twig);
+      }
+    }
+
+    // A few dark clinging tufts (dead moss/lichen) so canopy isn't empty
+    const tuftMat = new THREE.MeshStandardMaterial({ color: 0x1a2012, roughness: 0.95 });
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.4 + Math.random() * 0.5;
+      const tuft = mkMesh(new THREE.IcosahedronGeometry(0.18 + Math.random() * 0.1, 0), tuftMat);
+      tuft.position.set(Math.cos(a) * r, trunkH + Math.random() * 0.6, Math.sin(a) * r);
+      g.add(tuft);
+    }
+    return g;
   }
-  // Canopy — lots of small spheres tinted with leaf color.
-  const colors: Record<typeof variant, number> = {
-    oak: 0x4e8a2e,
-    sakura: 0xffb3d6,
-    pine: 0x27502a,
-  };
-  const color = colors[variant];
+
+  // kind === "pine"
+  const pineColor = 0x14281a; // very dark forest green
   const leafMat = new THREE.MeshStandardMaterial({
-    map: leavesTexture(color),
-    color: 0xffffff,
-    roughness: 0.8,
+    map: leavesTexture(pineColor),
+    color: 0xbcd8b8,
+    roughness: 0.85,
   });
-  const canopyH = trunkH + 0.4;
-  const clumps = variant === "pine" ? 18 : 34;
-  const radiusBase = variant === "pine" ? 0.6 : 1.1;
+  const canopyH = trunkH + 0.2;
+  const clumps = 24;
   for (let i = 0; i < clumps; i++) {
-    const r = 0.28 + Math.random() * 0.25;
-    const leaf = mkMesh(new THREE.IcosahedronGeometry(r, 1), leafMat);
-    const heightOff = variant === "pine" ? (i / clumps) * 2 : Math.random() * 1.6 - 0.3;
-    const radius = radiusBase * (variant === "pine" ? (1 - i / clumps) : 1);
+    const t = i / clumps;
+    const r = 0.75 * (1 - t * 0.9) + 0.15;
+    const y = canopyH + t * 2.4;
+    const leaf = mkMesh(new THREE.ConeGeometry(r, 0.5 + Math.random() * 0.2, 6), leafMat);
     const a = Math.random() * Math.PI * 2;
-    leaf.position.set(
-      Math.cos(a) * radius * (0.5 + Math.random() * 0.5),
-      canopyH + heightOff,
-      Math.sin(a) * radius * (0.5 + Math.random() * 0.5)
-    );
+    leaf.position.set(Math.cos(a) * 0.05, y, Math.sin(a) * 0.05);
+    leaf.rotation.y = Math.random() * Math.PI;
     g.add(leaf);
   }
-  // Center big clump
-  const center = mkMesh(new THREE.IcosahedronGeometry(variant === "pine" ? 0.7 : 0.95, 2), leafMat);
-  center.position.y = canopyH + (variant === "pine" ? 0.3 : 0.2);
-  g.add(center);
+  // Very tip
+  const tip = mkMesh(new THREE.ConeGeometry(0.2, 0.6, 6), leafMat);
+  tip.position.y = canopyH + 2.6;
+  g.add(tip);
   return g;
 }
 
 // ---------------- Grass clumps ----------------
 export function grassClump(): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x5a9a30, roughness: 0.9, side: THREE.DoubleSide });
+  // Darker, desaturated green to fit the gothic palette.
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2e5220, roughness: 0.95, side: THREE.DoubleSide });
   const blades = 12;
   for (let i = 0; i < blades; i++) {
     const h = 0.15 + Math.random() * 0.25;
