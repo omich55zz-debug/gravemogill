@@ -1,56 +1,92 @@
 import Phaser from "phaser";
 import { WORLD_W, WORLD_H } from "../data/config";
 
+export type ZombieVariant = "normal" | "skinny" | "fat" | "headless";
+
+const GROANS: Record<ZombieVariant, string[]> = {
+  normal:   ["Ууу…", "Мозг…", "Уагрх…"],
+  skinny:   ["Хи-хи…", "Мяссоо…", "Тьфу!"],
+  fat:      ["Ухгх…", "Жра…", "Бунгх…"],
+  headless: ["…", "Гррх…", "Ш-ш-ш…"],
+};
+
 /**
  * A wandering zombie that rises from a completed grave at night.
  * Auto-despawns after a lifetime, or when the player hits it (dispel).
+ * Variants differ in scale, speed, lifetime, tint and groans.
  */
 export class Zombie extends Phaser.Events.EventEmitter {
   sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Ellipse;
+  variant: ZombieVariant;
   private scene: Phaser.Scene;
   private targetX: number;
   private targetY: number;
-  private speed = 14;
-  private lifetime: number; // ms remaining before auto-despawn
+  private speed: number;
+  private lifetime: number;
   private emergeT = 0;
-  private readonly emergeDuration = 900; // ms to rise out of the ground
+  private readonly emergeDuration = 900;
   private nextGroan = 0;
+  private armT = 0;
   public dead = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, variant: ZombieVariant = "normal") {
     super();
     this.scene = scene;
+    this.variant = variant;
+    this.shadow = scene.add.ellipse(x, y + 1, 14, 5, 0x000000, 0.35).setDepth(y - 0.1);
     this.sprite = scene.add.image(x, y, "zombie")
       .setOrigin(0.5, 0.9)
       .setDepth(y + 5);
-    // Start at alpha 0, with a small "emerge" sprite offset so it looks like
-    // the zombie is pushing up out of the earth.
     this.sprite.setAlpha(0);
     this.sprite.y += 4;
+
+    // Variant-specific tuning.
+    switch (variant) {
+      case "skinny":
+        this.sprite.setScale(1, 1.15);
+        this.sprite.setTint(0xc7e4a3);
+        this.speed = 22;
+        this.lifetime = Phaser.Math.Between(8000, 14000);
+        break;
+      case "fat":
+        this.sprite.setScale(1.25, 0.95);
+        this.sprite.setTint(0x9fbf73);
+        this.shadow.setSize(18, 6);
+        this.speed = 9;
+        this.lifetime = Phaser.Math.Between(14000, 24000);
+        break;
+      case "headless":
+        this.sprite.setTint(0x8ca878);
+        this.speed = 16;
+        this.lifetime = Phaser.Math.Between(12000, 22000);
+        break;
+      default:
+        this.speed = 14;
+        this.lifetime = Phaser.Math.Between(10000, 20000);
+    }
+
     this.targetX = x;
     this.targetY = y;
-    this.lifetime = Phaser.Math.Between(10000, 20000);
   }
 
   update(dt: number, playerX: number, playerY: number) {
     if (this.dead) return;
 
-    // Emerge animation
     if (this.emergeT < this.emergeDuration) {
       this.emergeT += dt * 1000;
       const p = Math.min(1, this.emergeT / this.emergeDuration);
       this.sprite.setAlpha(p);
-      this.sprite.y = this.targetY + 4 - 4 * p; // rise by 4px
+      this.sprite.y = this.targetY + 4 - 4 * p;
+      this.shadow.setAlpha(0.35 * p);
       return;
     }
 
-    // Shamble towards a moving target — occasionally meander.
     const dx = this.targetX - this.sprite.x;
     const dy = this.targetY - this.sprite.y;
     const d = Math.hypot(dx, dy);
     if (d < 3) {
-      // 50% of the time stagger towards the player, 50% wander.
-      if (Math.random() < 0.5) {
+      if (Math.random() < 0.55) {
         this.targetX = Phaser.Math.Clamp(playerX + Phaser.Math.Between(-30, 30), 8, WORLD_W - 8);
         this.targetY = Phaser.Math.Clamp(playerY + Phaser.Math.Between(-20, 20), 8, WORLD_H - 8);
       } else {
@@ -58,7 +94,6 @@ export class Zombie extends Phaser.Events.EventEmitter {
         this.targetY = Phaser.Math.Clamp(this.sprite.y + Phaser.Math.Between(-16, 16), 8, WORLD_H - 8);
       }
     } else {
-      // Sway slightly side-to-side while walking for shamble effect.
       const sway = Math.sin(performance.now() / 250) * 0.6;
       this.sprite.x += (dx / d) * this.speed * dt + sway * dt;
       this.sprite.y += (dy / d) * this.speed * dt;
@@ -66,38 +101,36 @@ export class Zombie extends Phaser.Events.EventEmitter {
       else if (dx > 0.5) this.sprite.setFlipX(true);
     }
 
-    // Depth sort so it occludes correctly.
+    // Arm-sway animation: gentle rotation so it reads as an animated shamble.
+    this.armT += dt;
+    this.sprite.rotation = Math.sin(this.armT * 6) * 0.04;
+
+    this.shadow.x = this.sprite.x;
+    this.shadow.y = this.sprite.y + 1;
+    this.shadow.setDepth(this.sprite.y - 0.1);
     this.sprite.setDepth(this.sprite.y + 5);
 
-    // Groan occasionally.
     this.nextGroan -= dt * 1000;
     if (this.nextGroan <= 0) {
       this.nextGroan = Phaser.Math.Between(3000, 6000);
       this.groan();
     }
 
-    // Countdown to auto-despawn.
     this.lifetime -= dt * 1000;
     if (this.lifetime <= 0) {
       this.dispel(false);
     }
   }
 
-  /** Returns distance from this zombie to a point. */
   distanceTo(x: number, y: number): number {
     return Math.hypot(this.sprite.x - x, this.sprite.y - y);
   }
 
-  /**
-   * Destroy this zombie with a puff of dust. `byPlayer` signals whether the
-   * player struck it (awards coins) or it simply crumbled.
-   */
   dispel(byPlayer: boolean) {
     if (this.dead) return;
     this.dead = true;
     const x = this.sprite.x;
     const y = this.sprite.y - 6;
-    // Puff particles: gray circles expanding and fading.
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const p = this.scene.add.circle(x, y, 2, 0x888888, 0.9).setDepth(9999);
@@ -105,38 +138,34 @@ export class Zombie extends Phaser.Events.EventEmitter {
         targets: p,
         x: x + Math.cos(angle) * 14,
         y: y + Math.sin(angle) * 10 - 2,
-        alpha: 0,
-        scale: 0.4,
-        duration: 500,
-        ease: "Quad.Out",
+        alpha: 0, scale: 0.4,
+        duration: 500, ease: "Quad.Out",
         onComplete: () => p.destroy(),
       });
     }
     this.scene.tweens.add({
-      targets: this.sprite,
-      alpha: 0,
-      y: this.sprite.y + 2,
-      duration: 280,
-      onComplete: () => this.sprite.destroy(),
+      targets: this.sprite, alpha: 0, y: this.sprite.y + 2,
+      duration: 280, onComplete: () => this.sprite.destroy(),
     });
-    this.emit("dispelled", byPlayer, x, y);
+    this.scene.tweens.add({
+      targets: this.shadow, alpha: 0,
+      duration: 280, onComplete: () => this.shadow.destroy(),
+    });
+    this.emit("dispelled", byPlayer, x, y, this.variant);
   }
 
   private groan() {
-    const text = Math.random() < 0.5 ? "Ууу…" : "Мозг…";
+    const list = GROANS[this.variant];
+    const text = list[Math.floor(Math.random() * list.length)];
+    if (!text) return;
     const bubble = this.scene.add.text(this.sprite.x, this.sprite.y - 16, text, {
       fontFamily: "serif", fontSize: "6px", color: "#d0ffd0",
       backgroundColor: "#10160e",
-      padding: { x: 2, y: 1 },
-      stroke: "#000", strokeThickness: 1,
+      padding: { x: 2, y: 1 }, stroke: "#000", strokeThickness: 1,
     }).setOrigin(0.5, 1).setDepth(2000).setResolution(4);
     this.scene.tweens.add({
-      targets: bubble,
-      y: bubble.y - 6,
-      alpha: 0,
-      delay: 900,
-      duration: 500,
-      onComplete: () => bubble.destroy(),
+      targets: bubble, y: bubble.y - 6, alpha: 0,
+      delay: 900, duration: 500, onComplete: () => bubble.destroy(),
     });
   }
 }

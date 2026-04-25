@@ -1,4 +1,4 @@
-import { CONFIG } from "../data/config";
+import { CONFIG, tileToIso, isoToTile } from "../data/config";
 
 export type TerrainKind = "grass" | "plot" | "hole" | "path";
 
@@ -52,10 +52,11 @@ export class Grid {
   }
 
   worldToTile(wx: number, wy: number): { col: number; row: number } {
-    return { col: Math.floor(wx / CONFIG.TILE), row: Math.floor(wy / CONFIG.TILE) };
+    const { col, row } = isoToTile(wx, wy);
+    return { col: Math.floor(col + 0.5), row: Math.floor(row + 0.5) };
   }
 
   tileToWorldCenter(col: number, row: number): { x: number; y: number } {
-    return { x: col * CONFIG.TILE + CONFIG.TILE / 2, y: row * CONFIG.TILE + CONFIG.TILE / 2 };
+    return tileToIso(col, row);
   }
 }

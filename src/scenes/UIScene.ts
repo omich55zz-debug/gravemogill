@@ -8,6 +8,10 @@ import type { Cell } from "../utils/grid";
 import { portraitKey } from "../utils/sprites";
 import { tutorial } from "../systems/Tutorial";
 import { audio } from "../systems/Audio";
+import { shop, SHOVELS, HELPERS } from "../systems/Shop";
+import { progress, ACHIEVEMENTS } from "../systems/Progress";
+import { WEATHER_NAME_RU, WEATHER_ICON } from "../systems/Weather";
+import { i18n } from "../systems/I18n";
 
 /**
  * Parallel HUD scene. Draws everything in screen-space (Phaser at natural resolution).
@@ -82,8 +86,8 @@ export class UIScene extends Phaser.Scene {
     this.refreshActiveOrders();
     this.maybeShowOrderOffer();
 
-    // Mute toggle button (top-right of HUD, just left of the hint text).
-    this.createMuteButton();
+    // Top-right icon buttons: mute / settings / shop / achievements.
+    this.createTopRightButtons();
 
     // Tutorial kickoff — welcome hint fires on first ever session.
     this.time.delayedCall(400, () => this.tryHint("welcome"));
@@ -134,21 +138,33 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  private createMuteButton() {
+  private createTopRightButtons() {
     const size = 36;
-    const x = this.scale.width - size - 12;
     const y = 14;
-    const container = this.add.container(0, 0).setDepth(9000);
-    const circle = this.add.circle(x + size / 2, y + size / 2, size / 2, 0x1b151f, 0.9)
-      .setStrokeStyle(2, 0x8c6a36).setInteractive({ useHandCursor: true });
-    const icon = this.add.text(x + size / 2, y + size / 2, audio.muted ? "🔇" : "🔊", {
-      fontFamily: "sans-serif", fontSize: "18px", color: "#f0e7c8",
-    }).setOrigin(0.5);
-    container.add([circle, icon]);
-    circle.on("pointerup", () => {
+    let slot = 0;
+    const make = (label: string, onClick: () => void, refresh?: (icon: Phaser.GameObjects.Text) => void) => {
+      const x = this.scale.width - (size + 8) * (slot + 1) - 4;
+      const container = this.add.container(0, 0).setDepth(9000);
+      const circle = this.add.circle(x + size / 2, y + size / 2, size / 2, 0x1b151f, 0.9)
+        .setStrokeStyle(2, 0x8c6a36).setInteractive({ useHandCursor: true });
+      const icon = this.add.text(x + size / 2, y + size / 2, label, {
+        fontFamily: "sans-serif", fontSize: "18px", color: "#f0e7c8",
+      }).setOrigin(0.5);
+      container.add([circle, icon]);
+      circle.on("pointerup", () => { onClick(); refresh?.(icon); });
+      slot++;
+      return { container, circle, icon };
+    };
+    // order: [mute][settings][shop][achievements]
+    const mute = make(audio.muted ? "🔇" : "🔊", () => {}, () => {});
+    mute.circle.off("pointerup");
+    mute.circle.on("pointerup", () => {
       const muted = audio.toggleMuted();
-      icon.setText(muted ? "🔇" : "🔊");
+      mute.icon.setText(muted ? "🔇" : "🔊");
     });
+    make("⚙", () => this.openSettingsModal());
+    make("🛒", () => this.openShopModal());
+    make("🏆", () => this.openAchievementsModal());
   }
 
   // -------------- HUD --------------
@@ -547,6 +563,205 @@ export class UIScene extends Phaser.Scene {
     closeBg.setInteractive({ useHandCursor: true }).on("pointerup", () => this.closeModal());
     this.modal = c;
     (this.modal as any).__dim = dim;
+  }
+
+  // -------------- Settings modal --------------
+
+  private openSettingsModal() {
+    audio.play("click");
+    this.openModal((c) => {
+      const title = this.add.text(0, -160, "⚙  Настройки / Settings", {
+        fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+
+      const rows = [
+        { key: "master", label: "Громкость", get: () => audio.prefs.master, set: (v: number) => audio.setMasterVolume(v) },
+        { key: "music",  label: "Музыка",   get: () => audio.prefs.music,  set: (v: number) => audio.setMusicVolume(v) },
+        { key: "sfx",    label: "Эффекты",  get: () => audio.prefs.sfx,    set: (v: number) => audio.setSfxVolume(v) },
+      ];
+      rows.forEach((row, idx) => {
+        const y = -100 + idx * 38;
+        const lbl = this.add.text(-240, y, row.label, {
+          fontFamily: "serif", fontSize: "14px", color: "#d7c78b",
+        }).setOrigin(0, 0.5);
+        const track = this.add.rectangle(80, y, 200, 6, 0x2a2230).setStrokeStyle(1, 0x8c6a36);
+        const fill  = this.add.rectangle(-20, y, 200 * row.get(), 6, 0xd7c78b).setOrigin(0, 0.5);
+        const val   = this.add.text(200, y, `${Math.round(row.get() * 100)}%`, {
+          fontFamily: "serif", fontSize: "12px", color: "#d7c78b",
+        }).setOrigin(0, 0.5);
+        c.add([lbl, track, fill, val]);
+        track.setInteractive({ useHandCursor: true });
+        const onPick = (p: Phaser.Input.Pointer) => {
+          const localX = p.x - (this.scale.width / 2 + 80);
+          const t = Phaser.Math.Clamp((localX + 100) / 200, 0, 1);
+          row.set(t);
+          fill.width = 200 * t;
+          val.setText(`${Math.round(t * 100)}%`);
+        };
+        track.on("pointerdown", onPick);
+        track.on("pointermove", (p: Phaser.Input.Pointer) => { if (p.isDown) onPick(p); });
+      });
+
+      // Language toggle
+      const langLabel = this.add.text(-240, 30, "Язык / Language", {
+        fontFamily: "serif", fontSize: "14px", color: "#d7c78b",
+      }).setOrigin(0, 0.5);
+      const makeLangBtn = (x: number, text: string, lang: "ru" | "en") => {
+        const active = i18n.lang === lang;
+        const bg = this.add.rectangle(x, 30, 58, 26, active ? 0x3b2c14 : 0x1a1422)
+          .setStrokeStyle(1, 0x8c6a36);
+        const lb = this.add.text(x, 30, text, {
+          fontFamily: "serif", fontSize: "14px", color: active ? "#ffe8a3" : "#d7c78b",
+        }).setOrigin(0.5);
+        bg.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+          i18n.setLang(lang);
+          audio.play("click");
+          this.closeModal();
+          this.openSettingsModal();
+        });
+        c.add([bg, lb]);
+      };
+      makeLangBtn(40, "RU", "ru");
+      makeLangBtn(110, "EN", "en");
+      c.add(langLabel);
+
+      // Export / import save
+      const exportBtn = this.add.rectangle(-100, 90, 180, 30, 0x1a1422).setStrokeStyle(1, 0x8c6a36);
+      const exportLbl = this.add.text(-100, 90, "Экспорт сейва", {
+        fontFamily: "serif", fontSize: "13px", color: "#d7c78b",
+      }).setOrigin(0.5);
+      exportBtn.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+        const raw = localStorage.getItem("gravemogill.save.v1") ?? "{}";
+        try { navigator.clipboard?.writeText(raw); } catch { /* ignore */ }
+        window.prompt("Сейв (Ctrl+C для копирования):", raw);
+      });
+      const importBtn = this.add.rectangle(100, 90, 180, 30, 0x1a1422).setStrokeStyle(1, 0x8c6a36);
+      const importLbl = this.add.text(100, 90, "Импорт сейва", {
+        fontFamily: "serif", fontSize: "13px", color: "#d7c78b",
+      }).setOrigin(0.5);
+      importBtn.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+        const v = window.prompt("Вставьте JSON сейва:");
+        if (!v) return;
+        try {
+          JSON.parse(v);
+          localStorage.setItem("gravemogill.save.v1", v);
+          window.alert("Сейв импортирован. Перезагрузите страницу.");
+        } catch {
+          window.alert("Некорректный JSON");
+        }
+      });
+      c.add([exportBtn, exportLbl, importBtn, importLbl]);
+
+      // Weather line (read-only)
+      const w = this.game_.weather?.kind ?? "clear";
+      const wx = this.add.text(0, 150, `${WEATHER_ICON[w]}  Сейчас: ${WEATHER_NAME_RU[w]}`, {
+        fontFamily: "serif", fontSize: "13px", color: "#9a8f72",
+      }).setOrigin(0.5);
+      c.add(wx);
+    });
+  }
+
+  // -------------- Shop modal --------------
+
+  private openShopModal() {
+    audio.play("click");
+    this.openModal((c) => {
+      const title = this.add.text(0, -160, "🛒  Магазин", {
+        fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+
+      const header1 = this.add.text(-240, -120, "Апгрейды лопаты", {
+        fontFamily: "serif", fontSize: "14px", color: "#d7c78b", fontStyle: "bold",
+      }).setOrigin(0, 0.5);
+      c.add(header1);
+      SHOVELS.forEach((s, idx) => {
+        const y = -96 + idx * 34;
+        const owned = SHOVELS.indexOf(SHOVELS.find(x => x.tier === shop.tier)!) >= idx;
+        const current = shop.tier === s.tier;
+        const bg = this.add.rectangle(0, y, 500, 30, current ? 0x2a2112 : 0x1a1422)
+          .setStrokeStyle(1, current ? 0xd7c78b : 0x8c6a36);
+        const lbl = this.add.text(-240, y, `${s.icon}  ${s.name}  ·  ${s.description}`, {
+          fontFamily: "serif", fontSize: "12px", color: "#d7c78b",
+        }).setOrigin(0, 0.5);
+        const right = current
+          ? "Текущая"
+          : owned
+          ? "Куплено"
+          : `${s.cost}₽`;
+        const rlbl = this.add.text(240, y, right, {
+          fontFamily: "serif", fontSize: "12px",
+          color: current ? "#ffe8a3" : owned ? "#9a8f72" : "#d7c78b",
+        }).setOrigin(1, 0.5);
+        c.add([bg, lbl, rlbl]);
+        if (!current && !owned) {
+          bg.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+            if (!this.economy.spend(s.cost)) {
+              audio.play("fail");
+              return;
+            }
+            shop.setTier(s.tier);
+            audio.play("coin");
+            this.game_.tryUnlock?.("first_upgrade");
+            if (s.tier === "mythril") this.game_.tryUnlock?.("mythril_shovel");
+            this.closeModal();
+            this.openShopModal();
+          });
+        }
+      });
+
+      const header2 = this.add.text(-240, 60, "Помощники", {
+        fontFamily: "serif", fontSize: "14px", color: "#d7c78b", fontStyle: "bold",
+      }).setOrigin(0, 0.5);
+      c.add(header2);
+      HELPERS.forEach((h, idx) => {
+        const y = 86 + idx * 34;
+        const hired = shop.hasHelper(h.id);
+        const bg = this.add.rectangle(0, y, 500, 30, hired ? 0x2a2112 : 0x1a1422)
+          .setStrokeStyle(1, hired ? 0xd7c78b : 0x8c6a36);
+        const lbl = this.add.text(-240, y, `${h.icon}  ${h.name}  ·  ${h.description}`, {
+          fontFamily: "serif", fontSize: "12px", color: "#d7c78b",
+        }).setOrigin(0, 0.5);
+        const rlbl = this.add.text(240, y, hired ? "Нанят" : `${h.cost}₽`, {
+          fontFamily: "serif", fontSize: "12px", color: hired ? "#ffe8a3" : "#d7c78b",
+        }).setOrigin(1, 0.5);
+        c.add([bg, lbl, rlbl]);
+        if (!hired) {
+          bg.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+            if (!this.economy.spend(h.cost)) { audio.play("fail"); return; }
+            shop.hireHelper(h.id);
+            audio.play("coin");
+            this.closeModal();
+            this.openShopModal();
+          });
+        }
+      });
+    });
+  }
+
+  // -------------- Achievements modal --------------
+
+  private openAchievementsModal() {
+    audio.play("click");
+    this.openModal((c) => {
+      const unlockedCount = ACHIEVEMENTS.filter(a => progress.isUnlocked(a.id)).length;
+      const title = this.add.text(0, -165, `🏆  Достижения — ${unlockedCount}/${ACHIEVEMENTS.length}`, {
+        fontFamily: "serif", fontSize: "16px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+      // Two columns, compact list.
+      const col = (i: number) => (i % 2 === 0 ? -270 : 10);
+      const rowY = (i: number) => -135 + Math.floor(i / 2) * 22;
+      ACHIEVEMENTS.forEach((a, i) => {
+        const unl = progress.isUnlocked(a.id);
+        const line = this.add.text(col(i), rowY(i), `${unl ? a.icon : "·"}  ${a.title}`, {
+          fontFamily: "serif", fontSize: "11px",
+          color: unl ? "#ffe8a3" : "#6a6a72",
+        }).setOrigin(0, 0.5);
+        c.add(line);
+      });
+    });
   }
 
   private closeModal() {

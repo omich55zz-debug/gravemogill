@@ -2,12 +2,14 @@ import Phaser from "phaser";
 
 export class Player {
   sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Ellipse;
   speed = 80;
 
   // Virtual stick input (-1..1)
   stick = { x: 0, y: 0 };
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
+    this.shadow = scene.add.ellipse(x, y + 1, 14, 5, 0x000000, 0.35).setDepth(-1);
     this.sprite = scene.add.image(x, y, "player").setOrigin(0.5, 0.9).setDepth(0);
   }
 
@@ -23,6 +25,9 @@ export class Player {
     vx /= m; vy /= m;
     this.sprite.x += vx * this.speed * dt;
     this.sprite.y += vy * this.speed * dt;
+    this.shadow.x = this.sprite.x;
+    this.shadow.y = this.sprite.y + 1;
+    this.shadow.setDepth(this.sprite.y - 0.1);
     if (vx < -0.1) this.sprite.setFlipX(true);
     else if (vx > 0.1) this.sprite.setFlipX(false);
     // gentle bobbing when moving

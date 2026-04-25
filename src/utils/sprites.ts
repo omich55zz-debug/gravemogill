@@ -83,6 +83,41 @@ function register(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement) {
   scene.textures.addCanvas(key, canvas);
 }
 
+/**
+ * Take a flat 16×16 top-down tile and reproject it onto a 32×16 isometric
+ * diamond. Corners map:
+ *   flat (0,0)   → iso top    (16, 0)
+ *   flat (15,0)  → iso right  (32, 8)
+ *   flat (15,15) → iso bottom (16, 16)
+ *   flat (0,15)  → iso left   (0, 8)
+ * Pixels outside the diamond stay transparent.
+ */
+function makeIsoTile(flat: HTMLCanvasElement): HTMLCanvasElement {
+  const fctx = flat.getContext("2d")!;
+  const flatImg = fctx.getImageData(0, 0, 16, 16);
+  const { canvas, ctx } = makeCanvas(32, 16);
+  const out = ctx.createImageData(32, 16);
+  for (let iy = 0; iy < 16; iy++) {
+    for (let ix = 0; ix < 32; ix++) {
+      const dx = ix - 16;
+      // Diamond mask: |x-16| + 2|y-8| <= 16
+      if (Math.abs(dx) + 2 * Math.abs(iy - 8) > 16) continue;
+      const u = Math.floor(iy + dx / 2);
+      const v = Math.floor(iy - dx / 2);
+      if (u < 0 || u >= 16 || v < 0 || v >= 16) continue;
+      const si = (v * 16 + u) * 4;
+      const di = (iy * 32 + ix) * 4;
+      out.data[di]     = flatImg.data[si];
+      out.data[di + 1] = flatImg.data[si + 1];
+      out.data[di + 2] = flatImg.data[si + 2];
+      out.data[di + 3] = flatImg.data[si + 3];
+    }
+  }
+  // Slight dark border around the diamond edge so tiles read as separate.
+  ctx.putImageData(out, 0, 0);
+  return canvas;
+}
+
 // Deterministic PRNG (mulberry32) so each noise tile stays stable across reloads of a generated texture.
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -1242,13 +1277,13 @@ function zombieSprite(): HTMLCanvasElement {
 
 export function generateAllTextures(scene: Phaser.Scene) {
   // Terrain
-  register(scene, "tile_grass_0", tileGrass(1));
-  register(scene, "tile_grass_1", tileGrass(7));
-  register(scene, "tile_grass_2", tileGrass(23));
-  register(scene, "tile_dirt", tileDirt());
-  register(scene, "tile_hole", tileHole());
-  register(scene, "tile_plot", tilePlot());
-  register(scene, "tile_path", tilePath());
+  register(scene, "tile_grass_0", makeIsoTile(tileGrass(1)));
+  register(scene, "tile_grass_1", makeIsoTile(tileGrass(7)));
+  register(scene, "tile_grass_2", makeIsoTile(tileGrass(23)));
+  register(scene, "tile_dirt", makeIsoTile(tileDirt()));
+  register(scene, "tile_hole", makeIsoTile(tileHole()));
+  register(scene, "tile_plot", makeIsoTile(tilePlot()));
+  register(scene, "tile_path", makeIsoTile(tilePath()));
 
   // Characters
   register(scene, "player", playerSprite());

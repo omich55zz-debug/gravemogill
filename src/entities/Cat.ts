@@ -2,19 +2,14 @@ import Phaser from "phaser";
 import { CONFIG, WORLD_W, WORLD_H } from "../data/config";
 
 const SPEECH = [
-  "Мяу.",
-  "Мрр…",
-  "Мяу!",
-  "Кхм…",
-  "Нашёл!",
-  "Блестит…",
-  "Хвост!",
-  "Ммм?",
+  "Мяу.", "Мрр…", "Мяу!", "Кхм…", "Нашёл!", "Блестит…", "Хвост!", "Ммм?",
+  "Фырр…", "Птичка…", "Кормите!", "Рыба?", "Скучно.", "Погладь!",
 ];
 
 /** Autonomous cat companion. Wanders, periodically spawns a crystal (occasionally rare). */
 export class Cat extends Phaser.Events.EventEmitter {
   sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Ellipse;
   private scene: Phaser.Scene;
   private targetX: number;
   private targetY: number;
@@ -28,6 +23,7 @@ export class Cat extends Phaser.Events.EventEmitter {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super();
     this.scene = scene;
+    this.shadow = scene.add.ellipse(x, y + 1, 10, 4, 0x000000, 0.35).setDepth(-1);
     this.sprite = scene.add.image(x, y, "cat").setOrigin(0.5, 0.9).setDepth(0);
     this.targetX = x;
     this.targetY = y;
@@ -65,6 +61,9 @@ export class Cat extends Phaser.Events.EventEmitter {
       if (dx < -0.5) this.sprite.setFlipX(false);
       else if (dx > 0.5) this.sprite.setFlipX(true);
     }
+    this.shadow.x = this.sprite.x;
+    this.shadow.y = this.sprite.y + 1;
+    this.shadow.setDepth(this.sprite.y - 0.1);
 
     this.crystalTimer += dt * 1000;
     // Speed up crystal hunt a little (was CONFIG.CRYSTAL_SPAWN_EVERY_MS).

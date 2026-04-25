@@ -26,6 +26,19 @@ type SoundName =
   | "zombieGone"
   | "zombieHit";
 
+const PREFS_KEY = "gravemogill.audio.v1";
+interface AudioPrefs { master: number; sfx: number; music: number; muted: boolean; }
+function loadPrefs(): AudioPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) return { master: 0.6, sfx: 0.8, music: 0.25, muted: false, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { master: 0.6, sfx: 0.8, music: 0.25, muted: false };
+}
+function savePrefs(p: AudioPrefs) {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -34,8 +47,10 @@ class AudioEngine {
   private musicTimer: number | null = null;
   private musicStep = 0;
   public muted = false;
+  public prefs: AudioPrefs = loadPrefs();
 
   constructor() {
+    this.muted = this.prefs.muted;
     if (typeof window !== "undefined") {
       // Wait for a user gesture before starting audio (iOS + autoplay rules).
       const unlock = () => {
@@ -59,13 +74,13 @@ class AudioEngine {
         if (!Ctor) return null;
         this.ctx = new Ctor();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.6;
+        this.masterGain.gain.value = this.muted ? 0 : this.prefs.master;
         this.masterGain.connect(this.ctx.destination);
         this.sfxGain = this.ctx.createGain();
-        this.sfxGain.gain.value = 0.8;
+        this.sfxGain.gain.value = this.prefs.sfx;
         this.sfxGain.connect(this.masterGain);
         this.musicGain = this.ctx.createGain();
-        this.musicGain.gain.value = 0.25;
+        this.musicGain.gain.value = this.prefs.music;
         this.musicGain.connect(this.masterGain);
       } catch {
         return null;
@@ -77,12 +92,30 @@ class AudioEngine {
 
   setMuted(v: boolean) {
     this.muted = v;
-    if (this.masterGain) this.masterGain.gain.value = v ? 0 : 0.6;
+    this.prefs.muted = v;
+    savePrefs(this.prefs);
+    if (this.masterGain) this.masterGain.gain.value = v ? 0 : this.prefs.master;
   }
 
   toggleMuted(): boolean {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  setMasterVolume(v: number) {
+    this.prefs.master = Math.max(0, Math.min(1, v));
+    savePrefs(this.prefs);
+    if (this.masterGain && !this.muted) this.masterGain.gain.value = this.prefs.master;
+  }
+  setSfxVolume(v: number) {
+    this.prefs.sfx = Math.max(0, Math.min(1, v));
+    savePrefs(this.prefs);
+    if (this.sfxGain) this.sfxGain.gain.value = this.prefs.sfx;
+  }
+  setMusicVolume(v: number) {
+    this.prefs.music = Math.max(0, Math.min(1, v));
+    savePrefs(this.prefs);
+    if (this.musicGain) this.musicGain.gain.value = this.prefs.music;
   }
 
   play(name: SoundName) {

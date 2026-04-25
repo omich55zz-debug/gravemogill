@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CONFIG, WORLD_W, WORLD_H } from "../data/config";
+import { CONFIG, WORLD_W, WORLD_H, tileToIso } from "../data/config";
 import { Grid, type Cell } from "../utils/grid";
 import { Player } from "../entities/Player";
 import { Cat } from "../entities/Cat";
@@ -11,6 +11,8 @@ import { itemById, type CatalogItem } from "../data/catalog";
 import { progress } from "../systems/Progress";
 import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
+import { Weather, pickWeather } from "../systems/Weather";
+import { shop } from "../systems/Shop";
 
 interface DecorationInstance {
   item: CatalogItem;
@@ -44,7 +46,7 @@ export class GameScene extends Phaser.Scene {
   graveVisuals: Map<string, GraveVisual> = new Map();
 
   // Highlight for the "focused" tile in front of the player
-  focusRect!: Phaser.GameObjects.Rectangle;
+  focusRect!: Phaser.GameObjects.Graphics;
   focusedCell?: Cell;
 
   // Input state
@@ -60,6 +62,9 @@ export class GameScene extends Phaser.Scene {
   private startingBonus = 0;
   private shouldLoadSave = false;
   private autosaveTimer = 0;
+  weather!: Weather;
+  private lastWeatherDay = -1;
+  private lastAchievementDay = -1;
 
   constructor() { super("Game"); }
 
@@ -96,17 +101,31 @@ export class GameScene extends Phaser.Scene {
     for (let r = 0; r < CONFIG.ROWS; r++) {
       const row: Phaser.GameObjects.Image[] = [];
       for (let c = 0; c < CONFIG.COLS; c++) {
-        const img = this.add.image(c * CONFIG.TILE, r * CONFIG.TILE, this.terrainKey(this.grid.cells[r][c]))
-          .setOrigin(0, 0);
+        const { x, y } = tileToIso(c, r);
+        // Iso tiles are 32×16 diamonds, origin at top-centre of the diamond
+        // (so `y` is the top vertex). We want the centre of the tile to land
+        // at the iso coord, so anchor (0.5, 0.5) and shift down by half a tile.
+        const img = this.add.image(x, y, this.terrainKey(this.grid.cells[r][c]))
+          .setOrigin(0.5, 0.5);
+        img.setDepth(-1000 + c + r); // ground layer, with iso sort
         this.layerTerrain.add(img);
         row.push(img);
       }
       this.tileSprites.push(row);
     }
 
-    // Focus highlight (moves with player)
-    this.focusRect = this.add.rectangle(0, 0, CONFIG.TILE, CONFIG.TILE, 0xf0e7c8, 0.0)
-      .setOrigin(0, 0).setStrokeStyle(1, 0xf0e7c8, 0.9).setDepth(5).setVisible(false);
+    // Focus highlight (moves with player) — a diamond outline matching the iso tile.
+    const diamond = this.add.graphics();
+    diamond.lineStyle(1, 0xf0e7c8, 0.9);
+    diamond.beginPath();
+    diamond.moveTo(0, -CONFIG.ISO_H / 2);
+    diamond.lineTo(CONFIG.ISO_W / 2, 0);
+    diamond.lineTo(0, CONFIG.ISO_H / 2);
+    diamond.lineTo(-CONFIG.ISO_W / 2, 0);
+    diamond.closePath();
+    diamond.strokePath();
+    this.focusRect = diamond;
+    this.focusRect.setDepth(5).setVisible(false);
 
     // Entities
     const spawn = this.grid.tileToWorldCenter(14, 17);
@@ -202,6 +221,11 @@ export class GameScene extends Phaser.Scene {
     // Start ambient soundtrack (resume if already running).
     audio.music.start();
 
+    // Weather system: picks a new kind every in-game morning.
+    this.weather = new Weather(this);
+    this.weather.setKind(pickWeather());
+    this.lastWeatherDay = this.gameTime.day;
+
     // Resize handling
     this.scale.on("resize", () => this.refreshZoom());
     this.refreshZoom();
@@ -254,12 +278,36 @@ export class GameScene extends Phaser.Scene {
       this.saveNow();
     }
 
+    // Weather: re-roll once per in-game day. Night tint is continuous.
+    if (this.weather) {
+      if (this.gameTime.day !== this.lastWeatherDay) {
+        this.lastWeatherDay = this.gameTime.day;
+        this.weather.setKind(pickWeather());
+      }
+      this.weather.update(dt);
+      this.weather.applyNightTint(this.gameTime.hour);
+    }
+
+    // Opportunistic achievements tied to weather / night / time.
+    if (this.weather) {
+      if (this.weather.kind === "rain" && this.gameTime.day !== this.lastAchievementDay) {
+        this.tryUnlock("rain_survivor");
+      }
+      if (this.weather.kind === "fog" && this.gameTime.day !== this.lastAchievementDay) {
+        this.tryUnlock("fog_walker");
+      }
+      this.lastAchievementDay = this.gameTime.day;
+    }
+    const hour = this.gameTime.hour;
+    if (hour >= 0 && hour < 2) this.tryUnlock("night_owl");
+
     // Focused cell = tile the player is currently standing on
     const { col, row } = this.grid.worldToTile(this.player.x, this.player.y - 2);
     const cell = this.grid.at(col, row);
     this.focusedCell = cell;
     if (cell) {
-      this.focusRect.setPosition(col * CONFIG.TILE, row * CONFIG.TILE).setVisible(true);
+      const iso = tileToIso(col, row);
+      this.focusRect.setPosition(iso.x, iso.y).setVisible(true);
     } else {
       this.focusRect.setVisible(false);
     }
@@ -314,12 +362,10 @@ export class GameScene extends Phaser.Scene {
 
   /** Spawn a zombie at a random completed grave if conditions are right. */
   private maybeSpawnZombie() {
-    if (this.zombies.length >= 2) return;
+    if (this.zombies.length >= 5) return;
     const hour = this.gameTime.hour;
-    // Night only: 20:00 onwards (day ends at 24:00 in-game).
     const isNight = hour >= 20;
     if (!isNight) return;
-    // Gather completed graves.
     const candidates: Array<{ col: number; row: number }> = [];
     for (const [key, v] of this.graveVisuals.entries()) {
       if (!v.completed) continue;
@@ -330,34 +376,47 @@ export class GameScene extends Phaser.Scene {
       candidates.push({ col, row });
     }
     if (candidates.length === 0) return;
-    // 40% chance per attempt.
-    if (Math.random() > 0.4) return;
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    const { x, y } = this.grid.tileToWorldCenter(pick.col, pick.row);
-    const z = new Zombie(this, x, y + 4);
-    this.zombies.push(z);
-    audio.play("zombieRise");
-    z.on("dispelled", (byPlayer: boolean, zx: number, zy: number) => {
-      if (byPlayer) {
-        const reward = Phaser.Math.Between(30, 80);
-        this.economy.earn(reward);
-        audio.play("zombieHit");
-        audio.play("coin");
-        this.showFloatText(`Упокоен +${reward}₽`, zx, zy, "#a0ffc5");
-        this.tryUnlock("first_zombie");
-        const n = progress.bump("zombiesDispelled");
-        if (n >= 5) this.tryUnlock("zombie_hunter");
-      } else {
-        audio.play("zombieGone");
-        this.showFloatText("Рассыпался в прах", zx, zy, "#a0b6a0");
-      }
-    });
+    if (Math.random() > 0.45) return;
+    // Sometimes a pack of 2-3 rises together.
+    const packSize = Math.random() < 0.25 ? Phaser.Math.Between(2, 3) : 1;
+    for (let i = 0; i < packSize && this.zombies.length < 5; i++) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      const { x, y } = this.grid.tileToWorldCenter(pick.col, pick.row);
+      const variantRoll = Math.random();
+      const variant =
+        variantRoll < 0.5  ? "normal" :
+        variantRoll < 0.75 ? "skinny" :
+        variantRoll < 0.92 ? "fat"    : "headless";
+      const z = new Zombie(this, x + Phaser.Math.Between(-4, 4), y + 4, variant);
+      this.zombies.push(z);
+      audio.play("zombieRise");
+      z.on("dispelled", (byPlayer: boolean, zx: number, zy: number, vr: string) => {
+        if (byPlayer) {
+          // Variant-specific bounty.
+          const base = vr === "fat" ? 60 : vr === "headless" ? 90 : vr === "skinny" ? 35 : 40;
+          const reward = Phaser.Math.Between(base, base + 40);
+          this.economy.earn(reward);
+          audio.play("zombieHit");
+          audio.play("coin");
+          this.showFloatText(`Упокоен +${reward}₽`, zx, zy, "#a0ffc5");
+          this.tryUnlock("first_zombie");
+          const n = progress.bump("zombiesDispelled");
+          if (n >= 5)  this.tryUnlock("zombie_hunter");
+          if (n >= 25) this.tryUnlock("zombie_slayer");
+          if (vr === "headless") this.tryUnlock("headless_hunter");
+        } else {
+          audio.play("zombieGone");
+          this.showFloatText("Рассыпался в прах", zx, zy, "#a0b6a0");
+        }
+      });
+    }
   }
 
   /** Dig a grave on a plot cell (cost applied). */
   dig(cell: Cell): boolean {
     if (cell.terrain !== "plot") return false;
-    if (!this.economy.spend(CONFIG.DIG_COST)) {
+    const cost = Math.max(1, Math.round(CONFIG.DIG_COST * shop.digCostMultiplier()));
+    if (!this.economy.spend(cost)) {
       this.showFloatText("Нет денег на инструмент", this.player.x, this.player.y - 20, "#ff8080");
       return false;
     }
@@ -367,7 +426,7 @@ export class GameScene extends Phaser.Scene {
     audio.play("dig");
     this.tryUnlock("first_grave");
     this.maybeHint("place_tomb");
-    this.showFloatText(`Выкопано −${CONFIG.DIG_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
+    this.showFloatText(`Выкопано −${cost}₽`, this.player.x, this.player.y - 20, "#e6a94a");
     return true;
   }
 
@@ -532,7 +591,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private tryUnlock(id: string) {
+  tryUnlock(id: string) {
     const def = progress.unlock(id);
     if (!def) return;
     // Award coin bonus and show a toast via the UI scene.
