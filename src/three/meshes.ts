@@ -432,6 +432,52 @@ export function buildingBigCross(): THREE.Group {
   const horiz = mkMesh(new THREE.BoxGeometry(1.6, 0.3, 0.26), stoneA);
   horiz.position.y = 3.9;
   g.add(horiz);
+  // Glowing rune plaque on the pedestal face
+  const runeTex = runesEmissiveTexture();
+  const runes = mkMesh(
+    new THREE.PlaneGeometry(0.8, 0.7),
+    new THREE.MeshStandardMaterial({
+      map: runeTex, emissive: 0xffffff, emissiveMap: runeTex,
+      emissiveIntensity: 1.4, transparent: true, roughness: 0.6,
+    })
+  );
+  runes.position.set(0, 1.1, 0.51);
+  g.add(runes);
+  // Perched raven on the top of the cross
+  g.add(raven(0, 4.1, 0));
+  return g;
+}
+
+/**
+ * Small perched raven silhouette — charcoal body, sharp beak, subtle red eye.
+ * Mostly reads as a dark lump in top-down view but adds gothic flavor.
+ */
+export function raven(x = 0, y = 0, z = 0): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x070408, roughness: 0.9 });
+  const body = mkMesh(new THREE.SphereGeometry(0.1, 8, 6), bodyMat);
+  body.scale.set(1, 0.75, 1.4);
+  body.position.y = 0.08;
+  g.add(body);
+  const head = mkMesh(new THREE.SphereGeometry(0.065, 8, 6), bodyMat);
+  head.position.set(0, 0.18, 0.1);
+  g.add(head);
+  const beak = mkMesh(new THREE.ConeGeometry(0.022, 0.08, 4), new THREE.MeshStandardMaterial({ color: 0x141010, roughness: 0.5 }));
+  beak.position.set(0, 0.18, 0.18);
+  beak.rotation.x = Math.PI / 2;
+  g.add(beak);
+  const eye = mkMesh(
+    new THREE.SphereGeometry(0.012, 6, 4),
+    new THREE.MeshStandardMaterial({ color: 0xff2818, emissive: 0xff1808, emissiveIntensity: 1.2, roughness: 0.2 })
+  );
+  eye.position.set(0.04, 0.2, 0.14);
+  g.add(eye);
+  // Tail tip
+  const tail = mkMesh(new THREE.ConeGeometry(0.05, 0.14, 4), bodyMat);
+  tail.position.set(0, 0.08, -0.15);
+  tail.rotation.x = -Math.PI / 2;
+  g.add(tail);
   return g;
 }
 

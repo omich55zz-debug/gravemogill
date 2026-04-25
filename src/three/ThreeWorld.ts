@@ -8,7 +8,7 @@ import {
   flower, fenceWood, fenceIron, fenceStone,
   decorBouquet, decorCandle, decorWreath, decorBible,
   entityPlayer, entityCat, entityZombie, graveHole,
-  tree, grassClump, pond,
+  tree, grassClump, pond, raven,
 } from "./meshes";
 import {
   grassGroundTexture, stonePathTexture, earthTexture, nightSkyTexture,
@@ -251,6 +251,96 @@ export class ThreeWorld {
     const moonPillar = new THREE.PointLight(0xa8c6ff, 0.8, 10, 1.5);
     moonPillar.position.set(-cols / 2 + 4.5, 4, rows / 2 - 4.5);
     this.scene.add(moonPillar);
+
+    // Scatter perched ravens on random grass tiles — silent gothic extras.
+    for (let i = 0; i < 9; i++) {
+      const c = (rnd() * cols) | 0;
+      const r = (rnd() * rows) | 0;
+      if (!isGrass(c, r)) continue;
+      const { x, z } = worldC(c, r);
+      const rv = raven(x + (rnd() - 0.5) * 0.5, 0.05, z + (rnd() - 0.5) * 0.5);
+      rv.rotation.y = rnd() * Math.PI * 2;
+      this.scene.add(rv);
+    }
+
+    // Drifting volumetric mist — a handful of soft alpha planes that slowly
+    // drift across the cemetery. The update loop fades and repositions them.
+    this.buildMist(cols, rows);
+  }
+
+  // ---------------- Mist / fog planes ----------------
+  private mistPlanes: Array<{
+    mesh: THREE.Mesh;
+    vx: number;
+    vz: number;
+    phase: number;
+  }> = [];
+
+  private buildMist(cols: number, rows: number) {
+    // Soft radial alpha canvas used as a mist texture.
+    const c = document.createElement("canvas");
+    c.width = 128; c.height = 128;
+    const ctx = c.getContext("2d")!;
+    const grad = ctx.createRadialGradient(64, 64, 10, 64, 64, 64);
+    grad.addColorStop(0, "rgba(180, 190, 210, 0.55)");
+    grad.addColorStop(0.7, "rgba(120, 130, 160, 0.15)");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    // Add a few secondary blobs for organic shape
+    for (let i = 0; i < 6; i++) {
+      const gx = 20 + Math.random() * 88;
+      const gy = 20 + Math.random() * 88;
+      const gr = 20 + Math.random() * 30;
+      const g2 = ctx.createRadialGradient(gx, gy, 4, gx, gy, gr);
+      g2.addColorStop(0, "rgba(180, 190, 210, 0.25)");
+      g2.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      opacity: 0.45, color: 0xb8c0d8,
+      blending: THREE.AdditiveBlending,
+    });
+
+    for (let i = 0; i < 14; i++) {
+      const size = 5 + Math.random() * 4;
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+      plane.rotation.x = -Math.PI / 2;
+      plane.position.set(
+        (Math.random() - 0.5) * cols * 1.1,
+        0.25 + Math.random() * 0.6,
+        (Math.random() - 0.5) * rows * 1.1
+      );
+      this.scene.add(plane);
+      this.mistPlanes.push({
+        mesh: plane,
+        vx: (Math.random() - 0.5) * 0.0006,
+        vz: (Math.random() - 0.5) * 0.0006,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  private updateMist(t: number) {
+    const cols = CONFIG.COLS;
+    const rows = CONFIG.ROWS;
+    for (const m of this.mistPlanes) {
+      m.mesh.position.x += m.vx * 60;
+      m.mesh.position.z += m.vz * 60;
+      // Wrap around the map edges so mist drifts endlessly.
+      if (m.mesh.position.x > cols * 0.6) m.mesh.position.x = -cols * 0.6;
+      if (m.mesh.position.x < -cols * 0.6) m.mesh.position.x = cols * 0.6;
+      if (m.mesh.position.z > rows * 0.6) m.mesh.position.z = -rows * 0.6;
+      if (m.mesh.position.z < -rows * 0.6) m.mesh.position.z = rows * 0.6;
+      // Pulse opacity slowly for a breathing feel.
+      const mat = m.mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.28 + 0.18 * (0.5 + 0.5 * Math.sin(t * 0.0004 + m.phase));
+    }
   }
 
   setFocus(col: number, row: number, visible: boolean) {
@@ -476,6 +566,7 @@ export class ThreeWorld {
     const t = performance.now();
     this.updatePlayerLantern(t);
     this.updateTorches(t);
+    this.updateMist(t);
     this.renderer.render(this.scene, this.camera);
   }
 
