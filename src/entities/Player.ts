@@ -1,8 +1,13 @@
 import Phaser from "phaser";
+import type * as THREE from "three";
 
 export class Player {
   sprite: Phaser.GameObjects.Image;
   shadow: Phaser.GameObjects.Ellipse;
+  /** Optional 3D mesh mirrored to sprite position by GameScene. */
+  mesh3D?: THREE.Object3D;
+  /** Facing angle used for 3D mesh rotation. */
+  facingYaw = 0;
   speed = 130;
 
   // Virtual stick input (-1..1)
@@ -30,6 +35,11 @@ export class Player {
     this.shadow.setDepth(this.sprite.y - 0.1);
     if (vx < -0.1) this.sprite.setFlipX(true);
     else if (vx > 0.1) this.sprite.setFlipX(false);
+    if (m > 0.01) {
+      // Yaw in 3D world space: +z = forward (south) → 0 rad. In Phaser (top-
+      // down), +y also = south. Convert 2D velocity to yaw around Y (up).
+      this.facingYaw = Math.atan2(vx, vy);
+    }
     // gentle bobbing when moving (base scale is 1.6)
     const base = 1.6;
     if (m > 0.01) {

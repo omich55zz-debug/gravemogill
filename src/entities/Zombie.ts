@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import type * as THREE from "three";
 import { WORLD_W, WORLD_H } from "../data/config";
 
 export type ZombieVariant = "normal" | "skinny" | "fat" | "headless";
@@ -18,6 +19,9 @@ const GROANS: Record<ZombieVariant, string[]> = {
 export class Zombie extends Phaser.Events.EventEmitter {
   sprite: Phaser.GameObjects.Image;
   shadow: Phaser.GameObjects.Ellipse;
+  mesh3D?: THREE.Object3D;
+  facingYaw = 0;
+  emergePhase = 0; // 0..1 rise progress for 3D mesh animation
   variant: ZombieVariant;
   private scene: Phaser.Scene;
   private targetX: number;
@@ -79,11 +83,13 @@ export class Zombie extends Phaser.Events.EventEmitter {
     if (this.emergeT < this.emergeDuration) {
       this.emergeT += dt * 1000;
       const p = Math.min(1, this.emergeT / this.emergeDuration);
+      this.emergePhase = p;
       this.sprite.setAlpha(p);
       this.sprite.y = this.targetY + 4 - 4 * p;
       this.shadow.setAlpha(0.35 * p);
       return;
     }
+    this.emergePhase = 1;
 
     const dx = this.targetX - this.sprite.x;
     const dy = this.targetY - this.sprite.y;
@@ -98,10 +104,13 @@ export class Zombie extends Phaser.Events.EventEmitter {
       }
     } else {
       const sway = Math.sin(performance.now() / 250) * 0.6;
-      this.sprite.x += (dx / d) * this.speed * dt + sway * dt;
-      this.sprite.y += (dy / d) * this.speed * dt;
+      const vx = dx / d;
+      const vy = dy / d;
+      this.sprite.x += vx * this.speed * dt + sway * dt;
+      this.sprite.y += vy * this.speed * dt;
       if (dx < -0.5) this.sprite.setFlipX(false);
       else if (dx > 0.5) this.sprite.setFlipX(true);
+      this.facingYaw = Math.atan2(vx, vy);
     }
 
     // Arm-sway animation: gentle rotation so it reads as an animated shamble.

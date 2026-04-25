@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import type * as THREE from "three";
 import { CONFIG, WORLD_W, WORLD_H } from "../data/config";
 
 const SPEECH = [
@@ -10,6 +11,8 @@ const SPEECH = [
 export class Cat extends Phaser.Events.EventEmitter {
   sprite: Phaser.GameObjects.Image;
   shadow: Phaser.GameObjects.Ellipse;
+  mesh3D?: THREE.Object3D;
+  facingYaw = 0;
   private scene: Phaser.Scene;
   private targetX: number;
   private targetY: number;
@@ -56,10 +59,13 @@ export class Cat extends Phaser.Events.EventEmitter {
         }
       }
     } else {
-      this.sprite.x += (dx / d) * this.speed * dt;
-      this.sprite.y += (dy / d) * this.speed * dt;
+      const vx = dx / d;
+      const vy = dy / d;
+      this.sprite.x += vx * this.speed * dt;
+      this.sprite.y += vy * this.speed * dt;
       if (dx < -0.5) this.sprite.setFlipX(false);
       else if (dx > 0.5) this.sprite.setFlipX(true);
+      this.facingYaw = Math.atan2(vx, vy);
     }
     this.shadow.x = this.sprite.x;
     this.shadow.y = this.sprite.y + 1;

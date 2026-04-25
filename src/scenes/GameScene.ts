@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import * as THREE from "three";
 import { CONFIG, WORLD_W, WORLD_H, tileToIso } from "../data/config";
 import { Grid, type Cell } from "../utils/grid";
 import { Player } from "../entities/Player";
@@ -13,10 +14,12 @@ import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
 import { Weather, pickWeather } from "../systems/Weather";
 import { shop } from "../systems/Shop";
+import { ThreeWorld } from "../three/ThreeWorld";
 
 interface DecorationInstance {
   item: CatalogItem;
   image: Phaser.GameObjects.Image;
+  mesh?: THREE.Object3D;
 }
 
 interface GraveVisual {
@@ -26,6 +29,9 @@ interface GraveVisual {
   inscription?: Phaser.GameObjects.Text;
   orderId?: string;
   completed: boolean;
+  tombstoneMesh?: THREE.Object3D;
+  fenceMesh?: THREE.Object3D;
+  holeMesh?: THREE.Object3D;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -39,11 +45,16 @@ export class GameScene extends Phaser.Scene {
   private zombies: Zombie[] = [];
   private zombieSpawnCooldown = 0; // ms — wait before next spawn attempt
 
-  // Rendering layers
+  // Rendering layers (kept only as invisible data holders — actual rendering
+  // happens in Three.js via `three`).
   layerTerrain!: Phaser.GameObjects.Container;
   layerDecor!: Phaser.GameObjects.Container;
   tileSprites: Phaser.GameObjects.Image[][] = [];
   graveVisuals: Map<string, GraveVisual> = new Map();
+
+  // 3D world renderer. Owns the THREE scene / camera / meshes.
+  three!: ThreeWorld;
+  private propMeshes: THREE.Object3D[] = [];
 
   // Highlight for the "focused" tile in front of the player
   focusRect!: Phaser.GameObjects.Graphics;
@@ -91,35 +102,35 @@ export class GameScene extends Phaser.Scene {
     this.registry.set("orders", this.orders);
     this.registry.set("game", this);
 
-    this.cameras.main.setBackgroundColor(0x0b0b12);
+    this.cameras.main.setBackgroundColor("rgba(0,0,0,0)");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-    this.cameras.main.setZoom(this.computeInitialZoom());
 
-    // Terrain layer
-    this.layerTerrain = this.add.container(0, 0).setDepth(-10);
-    this.layerDecor = this.add.container(0, 0).setDepth(1);
+    // Initialise the 3D world renderer. It mounts its own canvas behind
+    // the Phaser canvas via the #app element.
+    const appEl = document.getElementById("app") ?? document.body;
+    this.three = new ThreeWorld(appEl);
+    this.three.buildGround(this.grid.cells);
+    this.registry.set("three", this.three);
+
+    // Phaser data-only containers; not drawn (Phaser camera shows nothing).
+    this.layerTerrain = this.add.container(0, 0).setAlpha(0);
+    this.layerDecor = this.add.container(0, 0).setAlpha(0);
     for (let r = 0; r < CONFIG.ROWS; r++) {
       const row: Phaser.GameObjects.Image[] = [];
       for (let c = 0; c < CONFIG.COLS; c++) {
         const { x, y } = tileToIso(c, r);
-        // Iso tiles are 32×16 diamonds, origin at top-centre of the diamond
-        // (so `y` is the top vertex). We want the centre of the tile to land
-        // at the iso coord, so anchor (0.5, 0.5) and shift down by half a tile.
         const img = this.add.image(x, y, this.terrainKey(this.grid.cells[r][c]))
-          .setOrigin(0.5, 0.5);
-        img.setDepth(-1000 + c + r); // ground layer, with iso sort
+          .setOrigin(0.5, 0.5)
+          .setAlpha(0);
         this.layerTerrain.add(img);
         row.push(img);
       }
       this.tileSprites.push(row);
     }
 
-    // Focus highlight — top-down square outline around the current tile.
-    const ring = this.add.graphics();
-    ring.lineStyle(2, 0xf0e7c8, 0.85);
-    ring.strokeRect(-CONFIG.ISO_W / 2 + 1, -CONFIG.ISO_H / 2 + 1, CONFIG.ISO_W - 2, CONFIG.ISO_H - 2);
-    this.focusRect = ring;
-    this.focusRect.setDepth(5).setVisible(false);
+    // Focus highlight is drawn in Three.js; retain an invisible Phaser
+    // Graphics handle so legacy setVisible()/setPosition() calls still work.
+    this.focusRect = this.add.graphics().setVisible(false).setAlpha(0);
 
     // Static necropolis decor (chapel, mausoleums, statues, pre-placed graves).
     this.placeNecropolisStructures();
@@ -127,9 +138,17 @@ export class GameScene extends Phaser.Scene {
     // Entities
     const spawn = this.grid.tileToWorldCenter(14, 17);
     this.player = new Player(this, spawn.x, spawn.y);
+    this.player.sprite.setAlpha(0);
+    this.player.shadow.setAlpha(0);
+    this.player.mesh3D = this.three.addPlayerMesh();
+
     const catSpawn = this.grid.tileToWorldCenter(12, 17);
     this.cat = new Cat(this, catSpawn.x, catSpawn.y);
+    this.cat.sprite.setAlpha(0);
+    if (this.cat.shadow) this.cat.shadow.setAlpha(0);
+    this.cat.mesh3D = this.three.addCatMesh();
 
+    // Camera follow is handled by ThreeWorld (orbit around the player).
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
 
     // Input
@@ -259,7 +278,38 @@ export class GameScene extends Phaser.Scene {
       this.cat.update(dt, this.player.x, this.player.y);
       for (const z of this.zombies) z.update(dt, this.player.x, this.player.y);
     }
+    // Remove 3D meshes for zombies that just died.
+    for (const z of this.zombies) {
+      if (z.dead && z.mesh3D) {
+        this.three.removeMesh(z.mesh3D);
+        z.mesh3D = undefined;
+      }
+    }
     this.zombies = this.zombies.filter(z => !z.dead);
+
+    // ----- Sync Three.js meshes to Phaser entity positions -----
+    if (this.player.mesh3D) {
+      const p = this.three.phaserToThree(this.player.x, this.player.y);
+      this.player.mesh3D.position.set(p.x, 0, p.z);
+      this.player.mesh3D.rotation.y = this.player.facingYaw;
+    }
+    if (this.cat.mesh3D) {
+      const c = this.three.phaserToThree(this.cat.sprite.x, this.cat.sprite.y);
+      this.cat.mesh3D.position.set(c.x, 0, c.z);
+      this.cat.mesh3D.rotation.y = this.cat.facingYaw;
+    }
+    for (const z of this.zombies) {
+      if (!z.mesh3D) continue;
+      const zp = this.three.phaserToThree(z.sprite.x, z.sprite.y);
+      // Rise animation: push down into ground during emerge phase.
+      const sink = (1 - z.emergePhase) * 1.2;
+      z.mesh3D.position.set(zp.x, -sink, zp.z);
+      z.mesh3D.rotation.y = z.facingYaw;
+    }
+    // Center the orbit camera on the player.
+    const op = this.three.phaserToThree(this.player.x, this.player.y);
+    this.three.setOrbitTarget(op.x, op.z);
+    this.three.render();
 
     // Zombie spawning: at night (22:00-05:00), chance every few seconds if
     // there's at least one completed grave and fewer than 2 zombies on screen.
@@ -304,10 +354,9 @@ export class GameScene extends Phaser.Scene {
     const cell = this.grid.at(col, row);
     this.focusedCell = cell;
     if (cell) {
-      const iso = tileToIso(col, row);
-      this.focusRect.setPosition(iso.x, iso.y).setVisible(true);
+      this.three.setFocus(col, row, true);
     } else {
-      this.focusRect.setVisible(false);
+      this.three.setFocus(0, 0, false);
     }
 
     // Depth sorting by y for nice overlap
@@ -386,6 +435,9 @@ export class GameScene extends Phaser.Scene {
         variantRoll < 0.75 ? "skinny" :
         variantRoll < 0.92 ? "fat"    : "headless";
       const z = new Zombie(this, x + Phaser.Math.Between(-4, 4), y + 4, variant);
+      z.sprite.setAlpha(0);
+      z.shadow.setAlpha(0);
+      z.mesh3D = this.three.addZombieMesh(variant);
       this.zombies.push(z);
       audio.play("zombieRise");
       z.on("dispelled", (byPlayer: boolean, zx: number, zy: number, vr: string) => {
@@ -421,6 +473,12 @@ export class GameScene extends Phaser.Scene {
     cell.terrain = "hole";
     cell.grave = { decorations: [] };
     this.redrawTile(cell.col, cell.row);
+    this.three?.setTileTerrain(cell.col, cell.row, "hole");
+    // Add a small dirt-mound mesh at the grave site.
+    const key = graveKey(cell.col, cell.row);
+    let v = this.graveVisuals.get(key);
+    if (!v) { v = { decorations: [], completed: false }; this.graveVisuals.set(key, v); }
+    v.holeMesh = this.three.addGraveHoleMesh(cell.col, cell.row);
     audio.play("dig");
     this.tryUnlock("first_grave");
     this.maybeHint("place_tomb");
@@ -439,9 +497,11 @@ export class GameScene extends Phaser.Scene {
     let v = this.graveVisuals.get(key);
     if (!v) { v = { decorations: [], completed: false }; this.graveVisuals.set(key, v); }
     if (v.tombstone) v.tombstone.destroy();
+    if (v.tombstoneMesh) this.three.removeMesh(v.tombstoneMesh);
     const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
-    v.tombstone = this.add.image(x, y + 4, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 10);
+    v.tombstone = this.add.image(x, y + 4, item.sprite).setOrigin(0.5, 0.9).setAlpha(0);
     this.layerDecor.add(v.tombstone);
+    v.tombstoneMesh = this.three.addProp(item.sprite, cell.col, cell.row) ?? undefined;
     cell.grave!.tombstoneId = item.id;
     audio.play("place");
     this.maybeHint("add_decor");
@@ -470,9 +530,24 @@ export class GameScene extends Phaser.Scene {
     } else if (item.category === "statue") {
       dx = 0; dy = -7;
     }
-    const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 12);
+    const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setAlpha(0);
     this.layerDecor.add(img);
-    v.decorations.push({ item, image: img });
+    // 3D decor mesh at a small offset inside the plot.
+    const mesh = this.three.meshForKey(item.sprite);
+    if (mesh) {
+      const offX = dx / CONFIG.ISO_W; // tiny sub-tile offset
+      const offZ = dy / CONFIG.ISO_H;
+      const { x: tx, z: tz } = this.three["phaserToThree"]
+        ? this.three.phaserToThree(x + dx, y + dy)
+        : { x: 0, z: 0 };
+      mesh.position.set(tx, 0, tz);
+      // tiny random rotation for variety
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      this.three.scene.add(mesh);
+      // mark unused vars
+      void offX; void offZ;
+    }
+    v.decorations.push({ item, image: img, mesh: mesh ?? undefined });
     cell.grave!.decorations.push(item.id);
     audio.play("place");
     this.tryUnlock("first_decor");
@@ -488,9 +563,11 @@ export class GameScene extends Phaser.Scene {
     }
     const v = this.graveVisuals.get(graveKey(cell.col, cell.row))!;
     if (v.fence) v.fence.destroy();
+    if (v.fenceMesh) this.three.removeMesh(v.fenceMesh);
     const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
-    v.fence = this.add.image(x, y + 8, item.sprite).setOrigin(0.5, 1).setDepth(y + 2);
+    v.fence = this.add.image(x, y + 8, item.sprite).setOrigin(0.5, 1).setAlpha(0);
     this.layerDecor.add(v.fence);
+    v.fenceMesh = this.three.addProp(item.sprite, cell.col, cell.row) ?? undefined;
     cell.grave!.fence = item.id;
     this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
     return true;
@@ -517,6 +594,7 @@ export class GameScene extends Phaser.Scene {
     }
     cell.terrain = "path";
     this.redrawTile(cell.col, cell.row);
+    this.three?.setTileTerrain(cell.col, cell.row, "path");
     audio.play("path");
     this.tryUnlock("path_builder");
     this.maybeHint("paths");
@@ -528,6 +606,7 @@ export class GameScene extends Phaser.Scene {
     if (cell.terrain !== "path") return false;
     cell.terrain = "grass";
     this.redrawTile(cell.col, cell.row);
+    this.three?.setTileTerrain(cell.col, cell.row, "grass");
     return true;
   }
 
@@ -647,6 +726,7 @@ export class GameScene extends Phaser.Scene {
         };
       }
       this.redrawTile(cell.col, cell.row);
+      this.three?.setTileTerrain(cell.col, cell.row, cell.terrain);
     }
     // Rebuild grave visuals (tombstone, decorations, fence, inscription).
     for (const row of this.grid.cells) {
@@ -655,20 +735,25 @@ export class GameScene extends Phaser.Scene {
         const v = { decorations: [] as DecorationInstance[], completed: !!cell.grave.completed };
         this.graveVisuals.set(graveKey(cell.col, cell.row), v as unknown as GraveVisual);
         const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+        if (cell.terrain === "hole") {
+          (v as GraveVisual).holeMesh = this.three.addGraveHoleMesh(cell.col, cell.row);
+        }
         if (cell.grave.tombstoneId) {
           const item = itemById(cell.grave.tombstoneId);
           if (item) {
             (v as GraveVisual).tombstone = this.add.image(x, y + 4, item.sprite)
-              .setOrigin(0.5, 0.9).setDepth(y + 10);
+              .setOrigin(0.5, 0.9).setAlpha(0);
             this.layerDecor.add((v as GraveVisual).tombstone!);
+            (v as GraveVisual).tombstoneMesh = this.three.addProp(item.sprite, cell.col, cell.row) ?? undefined;
           }
         }
         if (cell.grave.fence) {
           const item = itemById(cell.grave.fence);
           if (item) {
             (v as GraveVisual).fence = this.add.image(x, y + 2, item.sprite)
-              .setOrigin(0.5, 0.9).setDepth(y + 9);
+              .setOrigin(0.5, 0.9).setAlpha(0);
             this.layerDecor.add((v as GraveVisual).fence!);
+            (v as GraveVisual).fenceMesh = this.three.addProp(item.sprite, cell.col, cell.row) ?? undefined;
           }
         }
         for (const did of cell.grave.decorations) {
@@ -678,15 +763,22 @@ export class GameScene extends Phaser.Scene {
           if (item.category === "flower") { dx = -5 + Math.floor(Math.random() * 11); dy = -1 + Math.floor(Math.random() * 3); }
           else if (item.category === "lantern") { dx = item.id.includes("oil") ? -6 : 6; dy = -4; }
           else { dx = 0; dy = -7; }
-          const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 12);
+          const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setAlpha(0);
           this.layerDecor.add(img);
-          (v as GraveVisual).decorations.push({ item, image: img });
+          const mesh = this.three.meshForKey(item.sprite);
+          if (mesh) {
+            const { x: tx, z: tz } = this.three.phaserToThree(x + dx, y + dy);
+            mesh.position.set(tx, 0, tz);
+            mesh.rotation.y = Math.random() * Math.PI * 2;
+            this.three.scene.add(mesh);
+          }
+          (v as GraveVisual).decorations.push({ item, image: img, mesh: mesh ?? undefined });
         }
         if (cell.grave.inscription) {
           const text = cell.grave.inscription;
           const inscription = this.add.text(x, y - 4, shorten(text, 14), {
             fontFamily: "serif", fontSize: "4px", color: "#1a1a1a", align: "center", wordWrap: { width: 14 },
-          }).setOrigin(0.5, 0.5).setResolution(4).setDepth(y + 11);
+          }).setOrigin(0.5, 0.5).setResolution(4).setAlpha(0);
           this.layerDecor.add(inscription);
           (v as GraveVisual).inscription = inscription;
         }
@@ -723,15 +815,17 @@ export class GameScene extends Phaser.Scene {
 
   private placeNecropolisStructures() {
     // Large static props that make the map look like an existing necropolis.
-    // Positions are in tile coords. Each structure image is anchored at its
-    // bottom-centre and depth-sorted by its baseline y.
-    const place = (key: string, col: number, row: number, scale = 1) => {
+    // Each position creates an invisible Phaser placeholder (kept for legacy
+    // depth sorting compatibility) plus a real 3D mesh in the Three.js scene.
+    const place = (key: string, col: number, row: number, scale = 1, yaw = 0) => {
       const { x, y } = this.grid.tileToWorldCenter(col, row);
       const img = this.add.image(x, y + CONFIG.ISO_H / 2, key)
         .setOrigin(0.5, 1)
         .setScale(scale)
-        .setDepth(y);
+        .setAlpha(0);
       this.layerDecor.add(img);
+      const mesh = this.three.addProp(key, col, row, { yaw, scale });
+      if (mesh) this.propMeshes.push(mesh);
       return img;
     };
 
@@ -791,48 +885,36 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshZoom() {
-    // Re-clamp zoom after a viewport resize so it never goes outside the
-    // minimum (fit-to-view) or maximum (close-up) range.
-    const z = Phaser.Math.Clamp(this.cameras.main.zoom, this.minZoom(), this.maxZoom());
-    this.cameras.main.setZoom(z);
+    // Legacy no-op; camera zoom is handled in Three.js now.
   }
 
-  private computeInitialZoom(): number {
-    // Default: somewhat close-up so the player feels "near" the ground.
-    return Phaser.Math.Clamp(CONFIG.UPSCALE, this.minZoom(), this.maxZoom());
+  setCameraZoom(_z: number) {
+    // Legacy method; maps arbitrary zoom numbers to 3D orbit distance.
+    // Higher numeric zoom = closer → smaller distance.
+    if (!this.three) return;
+    const d = Math.max(this.three.minDistance, Math.min(this.three.maxDistance, 30 / Math.max(0.5, _z)));
+    this.three.setZoom(d);
   }
 
-  private minZoom(): number {
-    const vw = this.scale.width;
-    const vh = this.scale.height;
-    return Math.min(vw / WORLD_W, vh / WORLD_H, 1.0);
+  zoomIn() {
+    if (!this.three) return;
+    this.three.setZoom(this.three.orbitDistance * 0.85);
   }
-
-  private maxZoom(): number {
-    return 3.5;
+  zoomOut() {
+    if (!this.three) return;
+    this.three.setZoom(this.three.orbitDistance * 1.15);
   }
-
-  setCameraZoom(z: number) {
-    const zc = Phaser.Math.Clamp(z, this.minZoom(), this.maxZoom());
-    this.tweens.add({
-      targets: this.cameras.main, zoom: zc, duration: 180, ease: "Sine.Out",
-    });
-  }
-
-  zoomIn() { this.setCameraZoom(this.cameras.main.zoom * 1.25); }
-  zoomOut() { this.setCameraZoom(this.cameras.main.zoom / 1.25); }
 
   private installCameraControls() {
-    // Mouse wheel zoom — zoom toward the cursor position by shifting camera.
+    // Mouse wheel = 3D zoom.
     this.input.on("wheel", (_p: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
       if (this.uiModalOpen) return;
-      const factor = dy > 0 ? 0.9 : 1.1;
-      this.setCameraZoom(this.cameras.main.zoom * factor);
+      this.three.setZoom(this.three.orbitDistance * (dy > 0 ? 1.12 : 0.88));
     });
 
-    // Pinch-to-zoom on touch devices (tracking 2 active pointers).
+    // Pinch = zoom (two-finger).
     let pinchStartDist = 0;
-    let pinchStartZoom = 1;
+    let pinchStartDistance3D = 0;
     this.input.on("pointermove", () => {
       const p1 = this.input.pointer1;
       const p2 = this.input.pointer2;
@@ -840,15 +922,18 @@ export class GameScene extends Phaser.Scene {
         const d = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
         if (pinchStartDist === 0) {
           pinchStartDist = d;
-          pinchStartZoom = this.cameras.main.zoom;
+          pinchStartDistance3D = this.three.orbitDistance;
         } else if (d > 0) {
-          const z = pinchStartZoom * (d / pinchStartDist);
-          this.cameras.main.setZoom(Phaser.Math.Clamp(z, this.minZoom(), this.maxZoom()));
+          this.three.setZoom(pinchStartDistance3D * (pinchStartDist / d));
         }
       } else {
         pinchStartDist = 0;
       }
     });
+
+    // Keyboard Q/R = rotate camera yaw (E is reserved for the action key).
+    this.input.keyboard?.on("keydown-Q", () => this.three.rotateBy(-0.15, 0));
+    this.input.keyboard?.on("keydown-R", () => this.three.rotateBy(0.15, 0));
   }
 }
 

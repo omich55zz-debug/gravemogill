@@ -27,14 +27,18 @@
       #app {
         position: fixed;
         inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
-      canvas {
+      /* Three.js canvas (first child of #app) sits behind the Phaser canvas. */
+      #app canvas {
         display: block;
+        position: absolute;
+        inset: 0;
+      }
+      /* Phaser canvas (appended later) sits on top and passes pointer events
+         only on its drawn UI elements (Phaser game is transparent). */
+      #app canvas + canvas {
+        z-index: 10;
         image-rendering: pixelated;
-        image-rendering: crisp-edges;
       }
     </style>
   </head>
