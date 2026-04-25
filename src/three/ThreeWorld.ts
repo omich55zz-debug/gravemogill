@@ -53,8 +53,8 @@ export class ThreeWorld {
 
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x05060a);
-    this.scene.fog = new THREE.Fog(0x05060a, 26, 55);
+    this.scene.background = new THREE.Color(0x10131c);
+    this.scene.fog = new THREE.Fog(0x10131c, 32, 70);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -63,7 +63,7 @@ export class ThreeWorld {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.25;
     this.canvas = this.renderer.domElement;
     this.canvas.style.position = "absolute";
     this.canvas.style.inset = "0";
@@ -74,10 +74,10 @@ export class ThreeWorld {
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
 
     // Lighting — warm low sun, cool sky ambience. Slight blue rim via hemi.
-    this.ambient = new THREE.HemisphereLight(0x6a78a8, 0x221822, 0.55);
+    this.ambient = new THREE.HemisphereLight(0x8a98c8, 0x3a3230, 0.95);
     this.scene.add(this.ambient);
 
-    this.sun = new THREE.DirectionalLight(0xffe5a8, 1.05);
+    this.sun = new THREE.DirectionalLight(0xffe9b5, 1.45);
     this.sun.position.set(-12, 18, -8);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
