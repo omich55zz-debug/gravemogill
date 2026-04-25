@@ -488,6 +488,57 @@ export class UIScene extends Phaser.Scene {
     }
     this.game_.uiModalOpen = false;
   }
+
+  /**
+   * Public API called from GameScene when an achievement is unlocked. Shows a
+   * gold-trimmed toast at the top-centre of the screen for ~3s.
+   */
+  showAchievementToast(title: string, icon: string, reward: number) {
+    const { width } = this.scale;
+    const w = 320, h = 72;
+    const x = (width - w) / 2;
+    const y = 16;
+    const container = this.add.container(0, y).setDepth(10000);
+
+    const panel = this.add.rectangle(x, 0, w, h, 0x1b151f, 0.96).setOrigin(0, 0);
+    panel.setStrokeStyle(2, 0xe3b94f);
+
+    const iconText = this.add.text(x + 16, h / 2, icon, {
+      fontFamily: "sans-serif", fontSize: "36px", color: "#ffe89e",
+    }).setOrigin(0, 0.5).setShadow(1, 1, "#000", 3);
+
+    const headline = this.add.text(x + 60, 10, "Достижение разблокировано", {
+      fontFamily: "serif", fontSize: "13px", color: "#b9a97a",
+    });
+    const titleText = this.add.text(x + 60, 26, title, {
+      fontFamily: "serif", fontSize: "20px", color: "#f0e7c8",
+      fontStyle: "bold",
+    }).setShadow(1, 1, "#000", 2);
+    const rewardText = this.add.text(x + 60, 50, `+${reward}₽`, {
+      fontFamily: "serif", fontSize: "14px", color: "#8ac23e",
+    });
+
+    container.add([panel, iconText, headline, titleText, rewardText]);
+    container.setAlpha(0);
+    container.y = y - 20;
+
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      y: y,
+      duration: 260,
+      ease: "Quad.Out",
+    });
+    this.tweens.add({
+      targets: container,
+      alpha: 0,
+      y: y - 20,
+      delay: 2600,
+      duration: 400,
+      ease: "Quad.In",
+      onComplete: () => container.destroy(),
+    });
+  }
 }
 
 function shorten(s: string, max: number): string {

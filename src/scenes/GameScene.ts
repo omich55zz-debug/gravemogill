@@ -7,6 +7,7 @@ import { Economy } from "../systems/Economy";
 import { TimeSystem } from "../systems/TimeSystem";
 import { OrderSystem, type Order } from "../systems/OrderSystem";
 import { itemById, type CatalogItem } from "../data/catalog";
+import { progress } from "../systems/Progress";
 
 interface DecorationInstance {
   item: CatalogItem;
@@ -51,7 +52,13 @@ export class GameScene extends Phaser.Scene {
   // Currently active pop-ups (drawn by UI scene). Used to freeze time.
   uiModalOpen = false;
 
+  private startingBonus = 0;
+
   constructor() { super("Game"); }
+
+  init(data: { startingBonus?: number }) {
+    this.startingBonus = data?.startingBonus ?? 0;
+  }
 
   create() {
     // Game world setup
@@ -59,6 +66,11 @@ export class GameScene extends Phaser.Scene {
     this.economy = new Economy();
     this.gameTime = new TimeSystem();
     this.orders = new OrderSystem();
+
+    // Daily login bonus (credited on fresh days).
+    if (this.startingBonus > 0) {
+      this.economy.earn(this.startingBonus);
+    }
 
     // Share state so UIScene can read/write via registry + direct refs
     this.registry.set("economy", this.economy);
@@ -115,7 +127,18 @@ export class GameScene extends Phaser.Scene {
     this.cat.on("crystalCollected", (value: number, x: number, y: number) => {
       this.economy.earn(value);
       this.showFloatText(`+${value}₽ кристалл`, x, y, "#a8f0ff");
+      this.tryUnlock("crystal_finder");
+      progress.bump("crystalsCollected");
     });
+
+    // Money milestone achievements
+    this.economy.on("change", () => {
+      if (this.economy.money >= 100) this.tryUnlock("tycoon_100");
+      if (this.economy.money >= 1000) this.tryUnlock("tycoon_1000");
+    });
+
+    // Order acceptance
+    this.orders.on("accepted", () => this.tryUnlock("first_order"));
 
     // Order events
     this.orders.on("completed", ({ order, payout, verdict }: { order: Order; payout: number; verdict: string }) => {
@@ -126,6 +149,9 @@ export class GameScene extends Phaser.Scene {
       const color = verdict === "perfect" ? "#b8e994" : verdict === "over" ? "#e6a94a" : verdict === "under" ? "#ffd080" : "#ff7070";
       const msg = verdict === "perfect" ? "Идеально!" : verdict === "over" ? "Слишком пышно" : verdict === "under" ? "Скромновато" : "Просрочено";
       this.showFloatText(`${msg} +${payout}₽`, this.player.x, this.player.y - 20, color);
+      this.tryUnlock("first_complete");
+      const n = progress.bump("ordersCompleted");
+      if (n >= 5) this.tryUnlock("five_graves");
     });
 
     this.orders.on("failed", (order: Order) => {
@@ -226,6 +252,7 @@ export class GameScene extends Phaser.Scene {
     cell.terrain = "hole";
     cell.grave = { decorations: [] };
     this.redrawTile(cell.col, cell.row);
+    this.tryUnlock("first_grave");
     this.showFloatText(`Выкопано −${CONFIG.DIG_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
     return true;
   }
@@ -273,6 +300,7 @@ export class GameScene extends Phaser.Scene {
     this.layerDecor.add(img);
     v.decorations.push({ item, image: img });
     cell.grave!.decorations.push(item.id);
+    this.tryUnlock("first_decor");
     this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
     return true;
   }
@@ -313,6 +341,7 @@ export class GameScene extends Phaser.Scene {
     }
     cell.terrain = "path";
     this.redrawTile(cell.col, cell.row);
+    this.tryUnlock("path_builder");
     this.showFloatText(`Дорожка −${CONFIG.PATH_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
     return true;
   }
@@ -379,6 +408,19 @@ export class GameScene extends Phaser.Scene {
       const gain = paths * CONFIG.PATH_INCOME_PER_DAY;
       this.economy.earn(gain);
       this.showFloatText(`Доход от дорожек +${gain}₽`, this.player.x, this.player.y - 20, "#a8e3a8");
+    }
+  }
+
+  private tryUnlock(id: string) {
+    const def = progress.unlock(id);
+    if (!def) return;
+    // Award coin bonus and show a toast via the UI scene.
+    this.economy.earn(def.rewardCoins);
+    const ui = this.scene.get("UI") as Phaser.Scene & {
+      showAchievementToast?: (title: string, icon: string, reward: number) => void;
+    };
+    if (ui && typeof ui.showAchievementToast === "function") {
+      ui.showAchievementToast(def.title, def.icon, def.rewardCoins);
     }
   }
 

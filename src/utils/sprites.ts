@@ -96,22 +96,45 @@ function rng(seed: number) {
 
 function tileGrass(seed: number): HTMLCanvasElement {
   const { canvas, ctx } = makeCanvas(16, 16);
-  rect(ctx, 0, 0, 16, 16, PAL.grass1);
   const r = rng(seed);
+  // Base gradient: slightly lighter top, darker bottom
+  for (let y = 0; y < 16; y++) {
+    const base = y < 5 ? PAL.grass2 : y < 11 ? PAL.grass1 : "#324a25";
+    rect(ctx, 0, y, 16, 1, base);
+  }
+  // Noise (individual blades)
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
       const v = r();
-      if (v > 0.86) px(ctx, x, y, PAL.grass3);
-      else if (v > 0.55) px(ctx, x, y, PAL.grass2);
+      if (v > 0.88) px(ctx, x, y, PAL.grass3);
+      else if (v > 0.72) px(ctx, x, y, PAL.grass2);
+      else if (v > 0.96) px(ctx, x, y, "#69923a");
     }
   }
-  // Tiny tufts
-  for (let i = 0; i < 4; i++) {
-    const gx = Math.floor(r() * 15);
-    const gy = Math.floor(r() * 15);
+  // Grass tufts (3-pixel clusters)
+  for (let i = 0; i < 3; i++) {
+    const gx = 1 + Math.floor(r() * 14);
+    const gy = 2 + Math.floor(r() * 12);
     px(ctx, gx, gy, PAL.leaf);
+    px(ctx, gx - 1, gy, PAL.leaf);
     px(ctx, gx + 1, gy, PAL.leaf);
-    px(ctx, gx, gy - 1, PAL.leafDark);
+    px(ctx, gx, gy - 1, "#69923a");
+    px(ctx, gx, gy + 1, PAL.leafDark);
+  }
+  // Occasional tiny pebble
+  if (r() > 0.5) {
+    const px0 = 2 + Math.floor(r() * 12);
+    const py0 = 2 + Math.floor(r() * 12);
+    px(ctx, px0, py0, PAL.stoneDark);
+    px(ctx, px0 + 1, py0, PAL.stone);
+  }
+  // Occasional tiny wildflower
+  if (r() > 0.75) {
+    const px0 = 2 + Math.floor(r() * 12);
+    const py0 = 2 + Math.floor(r() * 12);
+    const color = ["#e6b94a", "#f1ecd6", "#c73838"][Math.floor(r() * 3)];
+    px(ctx, px0, py0, color);
+    px(ctx, px0, py0 - 1, PAL.leaf);
   }
   return canvas;
 }
@@ -123,65 +146,124 @@ function tileDirt(): HTMLCanvasElement {
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
       const v = r();
-      if (v > 0.9) px(ctx, x, y, PAL.dirtDark);
+      if (v > 0.92) px(ctx, x, y, PAL.dirtDark);
       else if (v > 0.75) px(ctx, x, y, PAL.dirtLight);
+      else if (v > 0.98) px(ctx, x, y, "#2a1a08");
     }
+  }
+  // Small pebbles
+  for (let i = 0; i < 2; i++) {
+    const px0 = 2 + Math.floor(r() * 12);
+    const py0 = 2 + Math.floor(r() * 12);
+    px(ctx, px0, py0, PAL.stoneDark);
+    px(ctx, px0 + 1, py0, "#78603c");
+    px(ctx, px0, py0 + 1, PAL.dirtDark);
   }
   return canvas;
 }
 
 function tileHole(): HTMLCanvasElement {
-  // Dug grave hole (2 tiles wide usually, but we render one tile that tiles).
+  // Dug grave hole with raised dirt mound around it.
   const { canvas, ctx } = makeCanvas(16, 16);
+  // Outer grass remnant
   rect(ctx, 0, 0, 16, 16, PAL.grass2);
-  rect(ctx, 2, 2, 12, 12, PAL.dirtDark);
-  rect(ctx, 3, 3, 10, 10, "#1c1208");
-  // Rim of loose dirt
-  for (let x = 2; x < 14; x++) {
-    px(ctx, x, 1, PAL.dirtLight);
-    px(ctx, x, 14, PAL.dirt);
-  }
-  for (let y = 2; y < 14; y++) {
-    px(ctx, 1, y, PAL.dirt);
-    px(ctx, 14, y, PAL.dirt);
+  // Raised dirt rim around hole
+  rect(ctx, 1, 1, 14, 14, PAL.dirt);
+  // Rim highlight (top)
+  rect(ctx, 1, 1, 14, 1, PAL.dirtLight);
+  // Rim shadow (bottom)
+  rect(ctx, 1, 14, 14, 1, PAL.dirtDark);
+  // Hole proper with depth gradient
+  rect(ctx, 3, 3, 10, 10, "#3a2410");
+  rect(ctx, 4, 4, 8, 8, "#241508");
+  rect(ctx, 5, 5, 6, 6, "#100800");
+  // Inner shadow (dark right/bottom edges)
+  rect(ctx, 11, 4, 1, 8, "#000000");
+  rect(ctx, 4, 11, 8, 1, "#000000");
+  // Pile of loose dirt chunks around rim
+  const r = rng(99);
+  for (let i = 0; i < 6; i++) {
+    const side = Math.floor(r() * 4);
+    let x = 0, y = 0;
+    if (side === 0) { x = 2 + Math.floor(r() * 12); y = 0; }
+    else if (side === 1) { x = 2 + Math.floor(r() * 12); y = 15; }
+    else if (side === 2) { x = 0; y = 2 + Math.floor(r() * 12); }
+    else { x = 15; y = 2 + Math.floor(r() * 12); }
+    px(ctx, x, y, PAL.dirtLight);
   }
   return canvas;
 }
 
 function tilePlot(): HTMLCanvasElement {
-  // A visually distinct "reserved plot" tile — slightly darker grass with faint corner markers.
+  // Reserved plot: slightly flattened grass with four wooden survey stakes
+  // and rope lines between them.
   const { canvas, ctx } = makeCanvas(16, 16);
-  rect(ctx, 0, 0, 16, 16, PAL.grass1);
   const r = rng(33);
+  for (let y = 0; y < 16; y++) {
+    rect(ctx, 0, y, 16, 1, y < 8 ? PAL.grass1 : "#354f28");
+  }
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
       const v = r();
-      if (v > 0.9) px(ctx, x, y, PAL.grass2);
+      if (v > 0.88) px(ctx, x, y, PAL.grass2);
+      else if (v > 0.78) px(ctx, x, y, "#41602b");
     }
   }
-  // Corner stakes
+  // Rope outline (faint tan line along the border)
+  for (let x = 1; x < 15; x++) {
+    if (x % 2 === 0) {
+      px(ctx, x, 1, "#8c7348");
+      px(ctx, x, 14, "#6d5932");
+    }
+  }
+  for (let y = 1; y < 15; y++) {
+    if (y % 2 === 0) {
+      px(ctx, 1, y, "#8c7348");
+      px(ctx, 14, y, "#6d5932");
+    }
+  }
+  // Corner stakes (wooden posts with slight shadow)
   for (const [cx, cy] of [[1, 1], [14, 1], [1, 14], [14, 14]]) {
-    px(ctx, cx, cy, PAL.woodLight);
-    px(ctx, cx, cy + 1, PAL.woodDark);
+    rect(ctx, cx, cy - 1, 1, 3, PAL.woodDark);
+    px(ctx, cx, cy - 1, PAL.woodLight);
+    px(ctx, cx + (cx === 1 ? 1 : -1), cy + 1, "#1a1008"); // shadow cast
   }
   return canvas;
 }
 
 function tilePath(): HTMLCanvasElement {
+  // Cobblestone path — small irregular stones separated by dark mortar.
   const { canvas, ctx } = makeCanvas(16, 16);
-  rect(ctx, 0, 0, 16, 16, PAL.path1);
+  rect(ctx, 0, 0, 16, 16, "#3a2f1e"); // mortar base
   const r = rng(77);
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const v = r();
-      if (v > 0.85) px(ctx, x, y, PAL.path2);
-      else if (v > 0.97) px(ctx, x, y, PAL.stone);
+  // Stones in a rough grid with randomized size/shape
+  const stones: [number, number, number, number][] = [];
+  let y = 1;
+  while (y < 15) {
+    let x = 1 + Math.floor(r() * 2);
+    const h = 3 + Math.floor(r() * 2);
+    while (x < 15) {
+      const w = 3 + Math.floor(r() * 2);
+      if (x + w > 15) break;
+      stones.push([x, y, w, h]);
+      x += w + 1;
     }
+    y += h + 1;
   }
-  // Subtle border
-  for (let x = 0; x < 16; x++) {
-    px(ctx, x, 0, "#72634a");
-    px(ctx, x, 15, "#72634a");
+  for (const [sx, sy, sw, sh] of stones) {
+    // stone colour variation
+    const shade = r() > 0.5 ? PAL.path1 : PAL.path2;
+    const hi = "#c3b082";
+    const lo = "#6a5b40";
+    rect(ctx, sx, sy, sw, sh, shade);
+    // Top-left highlight
+    rect(ctx, sx, sy, sw, 1, hi);
+    rect(ctx, sx, sy, 1, sh, hi);
+    // Bottom-right shadow
+    rect(ctx, sx + sw - 1, sy, 1, sh, lo);
+    rect(ctx, sx, sy + sh - 1, sw, 1, lo);
+    // Random speckle
+    if (r() > 0.6) px(ctx, sx + 1 + Math.floor(r() * (sw - 2)), sy + 1 + Math.floor(r() * (sh - 2)), PAL.stone);
   }
   return canvas;
 }
@@ -461,177 +543,393 @@ function crystalSprite(): HTMLCanvasElement {
 // ---------- Tombstones (16x20) ----------
 
 function tombWood(): HTMLCanvasElement {
+  // Weathered wooden cross, leaning slightly, with grain and rusty nail.
   const { canvas, ctx } = makeCanvas(16, 20);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(3, 19, 10, 1);
-  // vertical beam
-  rect(ctx, 7, 5, 2, 14, PAL.wood);
-  rect(ctx, 7, 5, 1, 14, PAL.woodLight);
-  // horizontal
-  rect(ctx, 3, 8, 10, 2, PAL.wood);
-  rect(ctx, 3, 8, 10, 1, PAL.woodLight);
+  ctx.fillStyle = PAL.shadow; ctx.ellipse?.(8, 19, 5, 1, 0, 0, Math.PI * 2);
+  ctx.fillRect(3, 19, 10, 1);
+  // vertical beam (wood with grain)
+  rect(ctx, 7, 4, 3, 15, PAL.woodDark);
+  rect(ctx, 7, 4, 2, 15, PAL.wood);
+  rect(ctx, 7, 4, 1, 15, PAL.woodLight);
+  // beam top (rounded)
+  px(ctx, 7, 3, PAL.wood); px(ctx, 8, 3, PAL.wood);
+  // horizontal crossbeam
+  rect(ctx, 3, 7, 10, 3, PAL.woodDark);
+  rect(ctx, 3, 7, 10, 2, PAL.wood);
+  rect(ctx, 3, 7, 10, 1, PAL.woodLight);
+  // Grain lines
+  px(ctx, 4, 8, PAL.woodDark);
+  px(ctx, 9, 8, PAL.woodDark);
+  px(ctx, 8, 12, PAL.woodDark);
+  px(ctx, 8, 16, PAL.woodDark);
+  // Rusty nail where beams cross
+  px(ctx, 8, 9, "#4a2a10");
+  px(ctx, 8, 8, "#6a3a20");
+  // Moss at base
+  px(ctx, 6, 18, PAL.leafDark);
+  px(ctx, 10, 18, PAL.leaf);
   return canvas;
 }
 
 function tombStone(): HTMLCanvasElement {
+  // Carved rounded headstone with chiselled cross in relief and moss patches.
   const { canvas, ctx } = makeCanvas(16, 20);
   ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 19, 12, 1);
-  // base
-  rect(ctx, 2, 16, 12, 3, PAL.stoneDark);
-  rect(ctx, 2, 16, 12, 1, PAL.stoneLight);
-  // slab
-  rect(ctx, 4, 4, 8, 12, PAL.stone);
-  // round top
-  rect(ctx, 5, 3, 6, 1, PAL.stone);
-  rect(ctx, 6, 2, 4, 1, PAL.stone);
-  // highlight
-  rect(ctx, 4, 4, 1, 12, PAL.stoneLight);
-  // cross engraving
-  rect(ctx, 7, 7, 2, 6, PAL.stoneDark);
-  rect(ctx, 5, 9, 6, 2, PAL.stoneDark);
+  // Base plinth
+  rect(ctx, 1, 16, 14, 3, PAL.stoneDark);
+  rect(ctx, 1, 16, 14, 1, PAL.stone);
+  rect(ctx, 1, 18, 14, 1, "#3a3a3d");
+  // Slab body
+  rect(ctx, 3, 3, 10, 13, PAL.stone);
+  // Dome top
+  rect(ctx, 4, 2, 8, 1, PAL.stone);
+  rect(ctx, 5, 1, 6, 1, PAL.stone);
+  rect(ctx, 6, 0, 4, 1, PAL.stone);
+  // Left-side highlight
+  rect(ctx, 3, 3, 1, 13, PAL.stoneLight);
+  px(ctx, 4, 2, PAL.stoneLight);
+  px(ctx, 5, 1, PAL.stoneLight);
+  px(ctx, 6, 0, PAL.stoneLight);
+  // Right-side shadow
+  rect(ctx, 12, 3, 1, 13, PAL.stoneDark);
+  // Carved cross (shadowed recess)
+  rect(ctx, 7, 5, 2, 8, PAL.stoneDark);
+  rect(ctx, 5, 7, 6, 2, PAL.stoneDark);
+  // Cross highlight (inner edge)
+  px(ctx, 7, 5, "#3e3e41");
+  px(ctx, 5, 7, "#3e3e41");
+  // Inscription plate
+  rect(ctx, 5, 13, 6, 2, "#6e6e72");
+  px(ctx, 6, 13, "#8a8a8e");
+  // Moss at base
+  px(ctx, 3, 15, PAL.leaf);
+  px(ctx, 12, 15, PAL.leafDark);
+  px(ctx, 4, 15, PAL.leafDark);
   return canvas;
 }
 
 function tombMarble(): HTMLCanvasElement {
+  // Polished marble stele with gold-inlay cross, ornate top, and subtle veins.
   const { canvas, ctx } = makeCanvas(16, 20);
   ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 19, 14, 1);
-  rect(ctx, 1, 16, 14, 3, PAL.marbleDark);
-  rect(ctx, 1, 17, 14, 1, PAL.marble);
-  // slab
-  rect(ctx, 3, 3, 10, 13, PAL.marble);
-  rect(ctx, 3, 3, 1, 13, PAL.marbleDark);
-  rect(ctx, 3, 3, 10, 1, PAL.marbleDark);
-  // arched top
-  rect(ctx, 4, 2, 8, 1, PAL.marble);
-  rect(ctx, 5, 1, 6, 1, PAL.marble);
-  rect(ctx, 6, 0, 4, 1, PAL.marble);
-  // veins
-  px(ctx, 6, 6, PAL.marbleDark);
-  px(ctx, 7, 7, PAL.marbleDark);
-  px(ctx, 8, 8, PAL.marbleDark);
-  px(ctx, 9, 9, PAL.marbleDark);
-  // cross
-  rect(ctx, 7, 6, 2, 7, PAL.marbleDark);
-  rect(ctx, 5, 8, 6, 2, PAL.marbleDark);
+  // Base (two steps)
+  rect(ctx, 0, 17, 16, 2, PAL.marbleDark);
+  rect(ctx, 0, 17, 16, 1, PAL.marble);
+  rect(ctx, 1, 16, 14, 1, "#ebebf0");
+  // Main slab
+  rect(ctx, 2, 3, 12, 13, PAL.marble);
+  // Decorative shoulders
+  px(ctx, 2, 4, PAL.marble); px(ctx, 13, 4, PAL.marble);
+  // Arched top with crenellations
+  rect(ctx, 3, 2, 10, 1, PAL.marble);
+  rect(ctx, 4, 1, 8, 1, PAL.marble);
+  rect(ctx, 5, 0, 6, 1, PAL.marble);
+  px(ctx, 7, -1 < 0 ? 0 : -1, PAL.gold);
+  // Left highlight
+  rect(ctx, 2, 3, 1, 13, "#ebebf0");
+  rect(ctx, 3, 2, 1, 1, "#ebebf0");
+  rect(ctx, 4, 1, 1, 1, "#ebebf0");
+  rect(ctx, 5, 0, 1, 1, "#ebebf0");
+  // Right shadow
+  rect(ctx, 13, 3, 1, 13, PAL.marbleDark);
+  rect(ctx, 12, 2, 1, 1, PAL.marbleDark);
+  rect(ctx, 11, 1, 1, 1, PAL.marbleDark);
+  rect(ctx, 10, 0, 1, 1, PAL.marbleDark);
+  // Veins (diagonal)
+  px(ctx, 5, 6, "#b0b0bf");
+  px(ctx, 6, 7, "#b0b0bf");
+  px(ctx, 10, 10, "#b0b0bf");
+  px(ctx, 11, 11, "#b0b0bf");
+  px(ctx, 4, 12, "#b0b0bf");
+  // Gold inlay cross
+  rect(ctx, 7, 5, 2, 8, PAL.gold);
+  rect(ctx, 5, 7, 6, 2, PAL.gold);
+  // Cross highlight
+  px(ctx, 7, 5, PAL.flameCore);
+  px(ctx, 5, 7, PAL.flameCore);
+  // Gold halo dot at top of cross
+  px(ctx, 7, 4, PAL.gold); px(ctx, 8, 4, PAL.gold);
   return canvas;
 }
 
 function tombObelisk(): HTMLCanvasElement {
+  // Tall granite obelisk with stepped plinth, pyramid cap, and gold tip.
   const { canvas, ctx } = makeCanvas(16, 20);
   ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 19, 12, 1);
-  // base
-  rect(ctx, 2, 16, 12, 3, PAL.graniteDark);
-  rect(ctx, 3, 15, 10, 1, PAL.granite);
-  rect(ctx, 3, 14, 10, 1, PAL.graniteDark);
-  // shaft
-  rect(ctx, 6, 3, 4, 12, PAL.granite);
-  rect(ctx, 6, 3, 1, 12, PAL.graniteDark);
-  rect(ctx, 9, 3, 1, 12, "#2a2c34");
-  // pyramid cap
-  rect(ctx, 6, 2, 4, 1, PAL.granite);
-  rect(ctx, 7, 1, 2, 1, PAL.granite);
-  px(ctx, 7, 0, PAL.gold);
-  px(ctx, 8, 0, PAL.gold);
-  // engravings
-  for (let y = 5; y < 14; y += 2) px(ctx, 7, y, PAL.graniteDark);
+  // Plinth (3 levels)
+  rect(ctx, 1, 17, 14, 2, PAL.graniteDark);
+  rect(ctx, 2, 16, 12, 1, PAL.granite);
+  rect(ctx, 2, 16, 12, 1, PAL.granite);
+  rect(ctx, 3, 15, 10, 1, "#5e606b");
+  rect(ctx, 3, 14, 10, 1, PAL.granite);
+  rect(ctx, 3, 13, 10, 1, PAL.graniteDark);
+  // Shaft (tapering slightly)
+  rect(ctx, 6, 4, 4, 9, PAL.granite);
+  rect(ctx, 6, 4, 1, 9, "#686a75");
+  rect(ctx, 9, 4, 1, 9, PAL.graniteDark);
+  rect(ctx, 6, 4, 4, 1, "#686a75");
+  // Pyramid cap
+  rect(ctx, 6, 3, 4, 1, PAL.granite);
+  rect(ctx, 7, 2, 2, 1, PAL.granite);
+  px(ctx, 7, 2, "#686a75");
+  // Gold capstone
+  px(ctx, 7, 1, PAL.gold);
+  px(ctx, 8, 1, PAL.brassDark);
+  // Engraved vertical line of hieroglyphs
+  px(ctx, 7, 6, PAL.graniteDark);
+  px(ctx, 8, 7, PAL.graniteDark);
+  px(ctx, 7, 8, PAL.graniteDark);
+  px(ctx, 8, 9, PAL.graniteDark);
+  px(ctx, 7, 10, PAL.graniteDark);
+  px(ctx, 8, 11, PAL.graniteDark);
   return canvas;
 }
 
-// ---------- Flowers (10x10) ----------
+// ---------- Flowers (12x12) ----------
 
 function flower(color: string): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(10, 10);
-  // stem
-  rect(ctx, 4, 4, 1, 5, PAL.leafDark);
-  rect(ctx, 5, 4, 1, 5, PAL.leaf);
-  // leaves
-  rect(ctx, 2, 6, 2, 1, PAL.leaf);
-  rect(ctx, 6, 7, 2, 1, PAL.leaf);
-  // petals (5)
-  px(ctx, 4, 1, color); px(ctx, 5, 1, color);
-  px(ctx, 3, 2, color); px(ctx, 6, 2, color);
-  px(ctx, 2, 3, color); px(ctx, 7, 3, color);
-  px(ctx, 3, 4, color); px(ctx, 6, 4, color);
-  px(ctx, 4, 3, PAL.gold); px(ctx, 5, 3, PAL.gold);
+  const { canvas, ctx } = makeCanvas(12, 12);
+  // Darker shade of petal for shadow side
+  const dark = shade(color, -40);
+  // Stem
+  rect(ctx, 5, 5, 1, 7, PAL.leafDark);
+  rect(ctx, 6, 5, 1, 7, PAL.leaf);
+  // Leaves (asymmetric)
+  rect(ctx, 2, 7, 3, 1, PAL.leaf);
+  rect(ctx, 2, 7, 3, 1, PAL.leaf);
+  px(ctx, 1, 7, PAL.leafDark);
+  px(ctx, 4, 8, PAL.leafDark);
+  rect(ctx, 7, 9, 3, 1, PAL.leaf);
+  px(ctx, 10, 9, PAL.leafDark);
+  // Bud (5 petals around a center)
+  // Upper petals
+  rect(ctx, 4, 0, 4, 2, color);
+  rect(ctx, 3, 1, 6, 2, color);
+  rect(ctx, 2, 2, 8, 2, color);
+  rect(ctx, 3, 4, 6, 1, color);
+  // Petal shading (bottom half)
+  rect(ctx, 3, 3, 6, 1, dark);
+  rect(ctx, 4, 4, 4, 1, dark);
+  // Petal highlights (top-left)
+  px(ctx, 4, 0, shade(color, 30));
+  px(ctx, 5, 0, shade(color, 30));
+  px(ctx, 3, 1, shade(color, 15));
+  // Centre pollen
+  px(ctx, 5, 2, PAL.gold);
+  px(ctx, 6, 2, PAL.gold);
+  px(ctx, 5, 3, PAL.brassDark);
+  px(ctx, 6, 3, PAL.brassDark);
   return canvas;
 }
 
-// ---------- Fence (16x8) drawn along bottom edge ----------
+// ---------- Fence (16x10) ----------
 
 function fenceWood(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(16, 8);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 7, 16, 1);
-  // horizontal rail
+  // Weathered picket fence — pickets of varying heights with grain.
+  const { canvas, ctx } = makeCanvas(16, 10);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 9, 16, 1);
+  // Upper rail
   rect(ctx, 0, 3, 16, 1, PAL.wood);
   rect(ctx, 0, 4, 16, 1, PAL.woodDark);
-  // pickets
-  for (let x = 1; x < 16; x += 3) {
-    rect(ctx, x, 0, 1, 7, PAL.wood);
+  // Lower rail
+  rect(ctx, 0, 7, 16, 1, PAL.wood);
+  rect(ctx, 0, 8, 16, 1, PAL.woodDark);
+  // Pickets (4 of them, pointed tops).
+  const xs = [1, 5, 9, 13];
+  for (const x of xs) {
+    // Picket body
+    rect(ctx, x, 2, 2, 7, PAL.wood);
+    // Left highlight
+    rect(ctx, x, 2, 1, 7, PAL.woodLight);
+    // Right shadow
+    rect(ctx, x + 1, 2, 1, 7, PAL.woodDark);
+    // Pointed top (single pixel tip)
+    px(ctx, x, 1, PAL.wood);
     px(ctx, x, 0, PAL.woodLight);
+    // Nail dots on rails
+    px(ctx, x, 3, PAL.ironDark);
+    px(ctx, x, 7, PAL.ironDark);
+    // Grain
+    px(ctx, x + 1, 5, PAL.woodDark);
   }
   return canvas;
 }
 
 function fenceIron(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(16, 8);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 7, 16, 1);
-  rect(ctx, 0, 3, 16, 1, PAL.iron);
-  rect(ctx, 0, 5, 16, 1, PAL.iron);
+  // Wrought iron fence — spikes on top, decorative spheres, ornate mid-rail.
+  const { canvas, ctx } = makeCanvas(16, 10);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 9, 16, 1);
+  // Mid rail (ornate — two lines)
+  rect(ctx, 0, 4, 16, 1, PAL.iron);
+  rect(ctx, 0, 6, 16, 1, PAL.iron);
+  // Bottom rail
+  rect(ctx, 0, 8, 16, 1, PAL.iron);
+  // Vertical bars
   for (let x = 1; x < 16; x += 2) {
-    rect(ctx, x, 0, 1, 7, PAL.iron);
-    px(ctx, x, 0, PAL.ironDark);
-    px(ctx, x, 1, PAL.brass);
+    rect(ctx, x, 1, 1, 8, PAL.iron);
+    // Bar highlight
+    px(ctx, x, 2, PAL.stoneDark);
+    px(ctx, x, 3, PAL.stoneDark);
+  }
+  // Spike tips (fleur-de-lis style)
+  for (let x = 1; x < 16; x += 2) {
+    px(ctx, x, 0, PAL.iron);
+    px(ctx, x, 1, PAL.iron);
+  }
+  // Brass finials on every other bar
+  for (let x = 1; x < 16; x += 4) {
+    px(ctx, x, 0, PAL.brass);
+    px(ctx, x - 1, 1, PAL.brass);
+    px(ctx, x + 1, 1, PAL.brass);
+    px(ctx, x, 1, PAL.brassDark);
+  }
+  // Decorative spheres on mid-rail where brass bars meet
+  for (let x = 1; x < 16; x += 4) {
+    px(ctx, x, 5, PAL.brass);
   }
   return canvas;
 }
 
-// ---------- Lanterns (8x14) ----------
+// ---------- Lanterns (10x16) ----------
 
 function lanternOil(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(8, 14);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 13, 4, 1);
-  // post
-  rect(ctx, 3, 5, 2, 8, PAL.woodDark);
-  // lamp box
-  rect(ctx, 1, 1, 6, 4, PAL.iron);
-  rect(ctx, 2, 2, 4, 2, PAL.flame);
-  px(ctx, 3, 2, PAL.flameCore);
-  px(ctx, 4, 2, PAL.flameCore);
-  // top
-  rect(ctx, 2, 0, 4, 1, PAL.iron);
+  // Oil lantern with glass window, post base, and soft glow.
+  const { canvas, ctx } = makeCanvas(10, 16);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 15, 6, 1);
+  // Glow halo
+  ctx.fillStyle = "rgba(255,201,77,0.18)";
+  ctx.beginPath(); ctx.arc(5, 4, 6, 0, Math.PI * 2); ctx.fill();
+  // Post
+  rect(ctx, 4, 7, 2, 8, PAL.woodDark);
+  rect(ctx, 4, 7, 1, 8, PAL.wood);
+  // Base bracket
+  rect(ctx, 3, 13, 4, 2, PAL.iron);
+  px(ctx, 3, 13, PAL.stoneDark);
+  px(ctx, 6, 13, PAL.stoneDark);
+  // Lantern body (cube)
+  rect(ctx, 1, 2, 8, 5, PAL.iron);
+  // Glass panels (flame visible)
+  rect(ctx, 2, 3, 6, 3, "#4a1f08");
+  rect(ctx, 3, 3, 4, 3, PAL.flame);
+  rect(ctx, 4, 4, 2, 2, PAL.flameCore);
+  px(ctx, 4, 3, "#ffffd0");
+  // Iron frame on glass
+  px(ctx, 5, 3, PAL.iron);
+  px(ctx, 5, 5, PAL.iron);
+  // Roof (pyramid)
+  rect(ctx, 1, 1, 8, 1, PAL.iron);
+  rect(ctx, 2, 0, 6, 1, PAL.iron);
+  // Finial
+  px(ctx, 4, -1 < 0 ? 0 : -1, PAL.brass);
+  rect(ctx, 4, 0, 2, 1, PAL.ironDark);
+  // Ring hanger
+  px(ctx, 5, 0, PAL.brass);
   return canvas;
 }
 
 function lanternBrass(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(8, 14);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 13, 4, 1);
-  rect(ctx, 3, 5, 2, 8, PAL.brassDark);
-  rect(ctx, 1, 1, 6, 4, PAL.brass);
-  rect(ctx, 2, 2, 4, 2, PAL.flameCore);
-  rect(ctx, 2, 0, 4, 1, PAL.brassDark);
-  // glow
-  ctx.fillStyle = "rgba(255,201,77,0.25)";
-  ctx.beginPath(); ctx.arc(4, 3, 5, 0, Math.PI * 2); ctx.fill();
+  // Brass standing lamp with glass globe and brighter glow.
+  const { canvas, ctx } = makeCanvas(10, 16);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 15, 6, 1);
+  // Large glow
+  ctx.fillStyle = "rgba(255,232,158,0.25)";
+  ctx.beginPath(); ctx.arc(5, 4, 7, 0, Math.PI * 2); ctx.fill();
+  // Post (brass with highlight)
+  rect(ctx, 4, 8, 2, 7, PAL.brassDark);
+  rect(ctx, 4, 8, 1, 7, PAL.brass);
+  // Decorative rings
+  rect(ctx, 3, 10, 4, 1, PAL.brass);
+  rect(ctx, 3, 13, 4, 1, PAL.brass);
+  // Base
+  rect(ctx, 2, 14, 6, 1, PAL.brassDark);
+  rect(ctx, 1, 15, 8, 1, PAL.brassDark);
+  // Globe housing
+  rect(ctx, 2, 1, 6, 7, PAL.brass);
+  // Glass globe (round)
+  rect(ctx, 3, 2, 4, 5, PAL.flameCore);
+  rect(ctx, 2, 3, 6, 3, PAL.flameCore);
+  rect(ctx, 3, 3, 4, 3, "#ffffe9");
+  // Flame dark centre
+  px(ctx, 4, 4, PAL.flame);
+  px(ctx, 5, 4, PAL.flame);
+  // Cage bars
+  px(ctx, 3, 5, PAL.brassDark);
+  px(ctx, 6, 5, PAL.brassDark);
+  // Top cap
+  rect(ctx, 3, 0, 4, 1, PAL.brassDark);
+  px(ctx, 4, -1 < 0 ? 0 : -1, PAL.gold);
   return canvas;
 }
 
 function statueAngel(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(14, 20);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 19, 10, 1);
-  // pedestal
-  rect(ctx, 2, 16, 10, 3, PAL.marbleDark);
-  rect(ctx, 3, 15, 8, 1, PAL.marble);
-  // body
-  rect(ctx, 5, 9, 4, 7, PAL.marble);
-  // head
-  rect(ctx, 5, 5, 4, 4, PAL.marble);
-  // halo
-  rect(ctx, 5, 4, 4, 1, PAL.gold);
-  // wings
-  rect(ctx, 2, 9, 3, 4, PAL.marble);
-  rect(ctx, 9, 9, 3, 4, PAL.marble);
-  rect(ctx, 2, 9, 1, 4, PAL.marbleDark);
-  rect(ctx, 11, 9, 1, 4, PAL.marbleDark);
+  // Marble angel statue on two-tier pedestal with feathered wings and halo.
+  const { canvas, ctx } = makeCanvas(16, 22);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(2, 21, 12, 1);
+  // Pedestal (two tiers)
+  rect(ctx, 1, 18, 14, 3, PAL.marbleDark);
+  rect(ctx, 1, 18, 14, 1, PAL.marble);
+  rect(ctx, 2, 17, 12, 1, "#ebebf0");
+  rect(ctx, 2, 16, 12, 1, PAL.marbleDark);
+  // Robe (flowing, widening toward base)
+  rect(ctx, 6, 11, 4, 5, PAL.marble);
+  rect(ctx, 5, 13, 6, 3, PAL.marble);
+  rect(ctx, 5, 13, 1, 3, PAL.marbleDark);
+  rect(ctx, 10, 13, 1, 3, PAL.marbleDark);
+  // Belt / sash detail
+  rect(ctx, 6, 13, 4, 1, PAL.gold);
+  // Torso
+  rect(ctx, 6, 9, 4, 2, PAL.marble);
+  // Arms (folded)
+  rect(ctx, 5, 10, 1, 2, PAL.marble);
+  rect(ctx, 10, 10, 1, 2, PAL.marble);
+  // Neck
+  px(ctx, 7, 8, PAL.marble);
+  px(ctx, 8, 8, PAL.marble);
+  // Head
+  rect(ctx, 6, 5, 4, 4, PAL.marble);
+  rect(ctx, 6, 5, 1, 4, "#ebebf0");
+  rect(ctx, 9, 5, 1, 4, PAL.marbleDark);
+  // Face shadow (eye line)
+  px(ctx, 7, 7, PAL.marbleDark);
+  px(ctx, 8, 7, PAL.marbleDark);
+  // Hair veil on sides
+  px(ctx, 5, 6, PAL.marble);
+  px(ctx, 10, 6, PAL.marble);
+  // Halo (gold ring above head)
+  rect(ctx, 6, 4, 4, 1, PAL.gold);
+  px(ctx, 5, 4, PAL.brassDark);
+  px(ctx, 10, 4, PAL.brassDark);
+  px(ctx, 7, 3, PAL.gold);
+  px(ctx, 8, 3, PAL.gold);
+  // Wings (feathered, spread slightly)
+  // Left wing
+  rect(ctx, 1, 8, 4, 6, PAL.marble);
+  rect(ctx, 0, 9, 1, 4, PAL.marbleDark);
+  rect(ctx, 1, 8, 1, 6, "#ebebf0");
+  // Left wing feather lines
+  for (let y = 9; y < 14; y += 2) px(ctx, 3, y, PAL.marbleDark);
+  // Right wing
+  rect(ctx, 11, 8, 4, 6, PAL.marble);
+  rect(ctx, 15, 9, 1, 4, PAL.marbleDark);
+  rect(ctx, 14, 8, 1, 6, PAL.marbleDark);
+  for (let y = 9; y < 14; y += 2) px(ctx, 12, y, PAL.marbleDark);
+  // Wing tips pointing up
+  px(ctx, 1, 7, PAL.marble);
+  px(ctx, 14, 7, PAL.marble);
   return canvas;
+}
+
+// Helper: darken/lighten a hex color.
+function shade(hex: string, amount: number): string {
+  if (!hex.startsWith("#")) return hex;
+  const n = hex.slice(1);
+  let r = parseInt(n.slice(0, 2), 16);
+  let g = parseInt(n.slice(2, 4), 16);
+  let b = parseInt(n.slice(4, 6), 16);
+  r = Math.max(0, Math.min(255, r + amount));
+  g = Math.max(0, Math.min(255, g + amount));
+  b = Math.max(0, Math.min(255, b + amount));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
 // ---------- Client portrait bubble (not used as texture, drawn by UI) ----------
