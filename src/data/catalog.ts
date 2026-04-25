@@ -31,6 +31,8 @@ export const CATALOG: CatalogItem[] = [
   { id: "bluebell", name: "Колокольчики", category: "flower", cost: 48, luxury: 22, sprite: "flower_blue" },
   { id: "peony",    name: "Пионы",    category: "flower", cost: 55, luxury: 25, sprite: "flower_pink"   },
   { id: "orchid",   name: "Орхидеи",  category: "flower", cost: 60, luxury: 28, sprite: "flower_purple" },
+  { id: "ghost_lily", name: "Призрачная лилия", category: "flower", cost: 120, luxury: 50, sprite: "flower_ghost" },
+  { id: "crimson_rose", name: "Алая роза", category: "flower", cost: 150, luxury: 62, sprite: "flower_rose" },
   { id: "wreath",   name: "Венок",    category: "flower", cost: 85, luxury: 36, sprite: "decor_wreath"  },
   { id: "candle",   name: "Свеча",    category: "flower", cost: 28, luxury: 12, sprite: "decor_candle"  },
   { id: "bible",    name: "Библия",   category: "flower", cost: 45, luxury: 18, sprite: "decor_bible"   },
@@ -38,6 +40,7 @@ export const CATALOG: CatalogItem[] = [
   // Fences — surround graves.
   { id: "wood_fence",  name: "Дер. оградка",    category: "fence", cost: 25, luxury: 6,  sprite: "fence_wood" },
   { id: "iron_fence",  name: "Кованая оградка", category: "fence", cost: 90, luxury: 22, sprite: "fence_iron" },
+  { id: "stone_fence", name: "Каменная стена",  category: "fence", cost: 170, luxury: 42, sprite: "fence_stone" },
 
   // Lanterns — ambient.
   { id: "oil_lantern",   name: "Масляный фонарь", category: "lantern", cost: 40,  luxury: 14, sprite: "lantern_oil"   },

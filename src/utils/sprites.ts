@@ -92,7 +92,7 @@ function register(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement) {
  *   flat (0,15)  → iso left   (0, 8)
  * Pixels outside the diamond stay transparent.
  */
-function makeIsoTile(flat: HTMLCanvasElement): HTMLCanvasElement {
+function makeIsoTile(flat: HTMLCanvasElement, lit = true): HTMLCanvasElement {
   const fctx = flat.getContext("2d")!;
   const flatImg = fctx.getImageData(0, 0, 16, 16);
   const { canvas, ctx } = makeCanvas(32, 16);
@@ -113,8 +113,51 @@ function makeIsoTile(flat: HTMLCanvasElement): HTMLCanvasElement {
       out.data[di + 3] = flatImg.data[si + 3];
     }
   }
-  // Slight dark border around the diamond edge so tiles read as separate.
   ctx.putImageData(out, 0, 0);
+
+  if (lit) {
+    // Light the diamond like a 3D tile lit from the top-left.
+    // Walk the diamond perimeter and brighten top-left edges, darken bottom-right.
+    // Top edges: top-left (0..16 along x, 8..0 along y) + top-right (16..32 along x, 0..8 along y)
+    // Bottom edges mirror.
+    const shadeDelta = (ix: number, iy: number, delta: number) => {
+      const dx = ix - 16;
+      if (Math.abs(dx) + 2 * Math.abs(iy - 8) > 16) return;
+      const idx = (iy * 32 + ix) * 4;
+      const a = out.data[idx + 3];
+      if (a < 8) return;
+      out.data[idx]     = Math.max(0, Math.min(255, out.data[idx] + delta));
+      out.data[idx + 1] = Math.max(0, Math.min(255, out.data[idx + 1] + delta));
+      out.data[idx + 2] = Math.max(0, Math.min(255, out.data[idx + 2] + delta));
+    };
+    // Top-left edge run: from (0, 8) up to (16, 0)
+    for (let i = 0; i <= 16; i++) {
+      const ix = i;
+      const iy = 8 - Math.round(i / 2);
+      shadeDelta(ix, iy, 28);
+      shadeDelta(ix + 1, iy, 14);
+    }
+    // Top-right edge: from (16, 0) down to (31, 7). This edge is *slightly* lit.
+    for (let i = 0; i <= 16; i++) {
+      const ix = 16 + i;
+      const iy = 0 + Math.round(i / 2);
+      shadeDelta(ix, iy, 10);
+    }
+    // Bottom-right edge: from (31, 8) down to (16, 15). Darken.
+    for (let i = 0; i <= 16; i++) {
+      const ix = 31 - i;
+      const iy = 8 + Math.round(i / 2);
+      shadeDelta(ix, iy, -30);
+      shadeDelta(ix, iy + 1, -16);
+    }
+    // Bottom-left edge: from (0, 7) to (16, 15). Mild shadow.
+    for (let i = 0; i <= 16; i++) {
+      const ix = 0 + i;
+      const iy = 7 + Math.round(i / 2);
+      shadeDelta(ix, iy, -14);
+    }
+    ctx.putImageData(out, 0, 0);
+  }
   return canvas;
 }
 
@@ -725,105 +768,266 @@ function tombObelisk(): HTMLCanvasElement {
 
 // ---------- Flowers (12x12) ----------
 
-function flower(color: string): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(12, 12);
-  // Darker shade of petal for shadow side
-  const dark = shade(color, -40);
-  // Stem
-  rect(ctx, 5, 5, 1, 7, PAL.leafDark);
-  rect(ctx, 6, 5, 1, 7, PAL.leaf);
-  // Leaves (asymmetric)
-  rect(ctx, 2, 7, 3, 1, PAL.leaf);
-  rect(ctx, 2, 7, 3, 1, PAL.leaf);
-  px(ctx, 1, 7, PAL.leafDark);
-  px(ctx, 4, 8, PAL.leafDark);
-  rect(ctx, 7, 9, 3, 1, PAL.leaf);
-  px(ctx, 10, 9, PAL.leafDark);
-  // Bud (5 petals around a center)
-  // Upper petals
-  rect(ctx, 4, 0, 4, 2, color);
-  rect(ctx, 3, 1, 6, 2, color);
-  rect(ctx, 2, 2, 8, 2, color);
-  rect(ctx, 3, 4, 6, 1, color);
-  // Petal shading (bottom half)
-  rect(ctx, 3, 3, 6, 1, dark);
-  rect(ctx, 4, 4, 4, 1, dark);
-  // Petal highlights (top-left)
-  px(ctx, 4, 0, shade(color, 30));
-  px(ctx, 5, 0, shade(color, 30));
-  px(ctx, 3, 1, shade(color, 15));
-  // Centre pollen
-  px(ctx, 5, 2, PAL.gold);
-  px(ctx, 6, 2, PAL.gold);
-  px(ctx, 5, 3, PAL.brassDark);
-  px(ctx, 6, 3, PAL.brassDark);
+function flower(color: string, opts: { glow?: boolean } = {}): HTMLCanvasElement {
+  // 14×18 — bigger bloom + longer stem + two leaves. Lit from top-left.
+  const W = 14, H = 18;
+  const { canvas, ctx } = makeCanvas(W, H);
+  const dark = shade(color, -55);
+  const mid  = shade(color, -25);
+  const hi   = shade(color, 28);
+  const glow = shade(color, 55);
+
+  // Optional glow halo for rare varieties.
+  if (opts.glow) {
+    ctx.fillStyle = `${color}33`;
+    ctx.beginPath(); ctx.arc(7, 5, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `${color}22`;
+    ctx.beginPath(); ctx.arc(7, 5, 9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Ground shadow under flower
+  ctx.fillStyle = PAL.shadow;
+  ctx.beginPath(); ctx.ellipse(7, 17, 4, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Stem (two tones)
+  rect(ctx, 7, 7, 1, 10, PAL.leaf);
+  rect(ctx, 6, 7, 1, 10, PAL.leafDark);
+  // Stem light fleck
+  px(ctx, 7, 10, "#6fa346");
+  px(ctx, 7, 13, "#6fa346");
+
+  // Left leaf (pointed oval)
+  rect(ctx, 3, 11, 3, 1, PAL.leaf);
+  rect(ctx, 2, 12, 5, 1, PAL.leaf);
+  rect(ctx, 3, 13, 4, 1, PAL.leafDark);
+  px(ctx, 1, 12, PAL.leafDark);
+  px(ctx, 4, 12, "#8cc262"); // leaf highlight
+  // Right leaf
+  rect(ctx, 8, 13, 4, 1, PAL.leaf);
+  rect(ctx, 8, 14, 5, 1, PAL.leaf);
+  rect(ctx, 9, 15, 4, 1, PAL.leafDark);
+  px(ctx, 12, 14, PAL.leafDark);
+  px(ctx, 10, 14, "#8cc262");
+
+  // --- Bloom (6 petals around a centre) ---
+  // Centre coord (7, 5), bloom radius ~4
+  // Upper petal
+  rect(ctx, 6, 0, 2, 2, color);
+  px(ctx, 5, 1, color); px(ctx, 8, 1, color);
+  // Lower petal
+  rect(ctx, 6, 7, 2, 2, color);
+  px(ctx, 5, 8, color); px(ctx, 8, 8, color);
+  // Left petal
+  rect(ctx, 2, 4, 2, 2, color);
+  px(ctx, 3, 3, color); px(ctx, 3, 6, color);
+  // Right petal
+  rect(ctx, 10, 4, 2, 2, color);
+  px(ctx, 10, 3, color); px(ctx, 10, 6, color);
+  // Diagonal petals
+  rect(ctx, 3, 2, 2, 2, color); // UL
+  rect(ctx, 9, 2, 2, 2, color); // UR
+  rect(ctx, 3, 6, 2, 2, color); // LL
+  rect(ctx, 9, 6, 2, 2, color); // LR
+
+  // Centre pollen (goldish)
+  rect(ctx, 6, 4, 2, 2, PAL.gold);
+  px(ctx, 6, 4, "#ffe8a3");
+  px(ctx, 7, 5, PAL.brassDark);
+  px(ctx, 6, 5, PAL.brassDark);
+
+  // Petal shading: bottom + right petals darker, top + left lighter.
+  // Lower petal
+  rect(ctx, 6, 8, 2, 1, dark);
+  px(ctx, 5, 8, mid);
+  px(ctx, 8, 8, mid);
+  // Right petal
+  rect(ctx, 11, 4, 1, 2, dark);
+  px(ctx, 10, 6, mid);
+  // Lower-right
+  rect(ctx, 9, 6, 2, 2, mid);
+  px(ctx, 10, 7, dark);
+  // Lower-left
+  px(ctx, 3, 7, mid);
+  px(ctx, 4, 7, dark);
+  // Upper petal highlight
+  px(ctx, 6, 0, hi);
+  px(ctx, 7, 0, hi);
+  // Upper-left petal highlight
+  px(ctx, 3, 2, hi);
+  px(ctx, 4, 2, hi);
+  // Left petal highlight
+  px(ctx, 2, 4, hi);
+  px(ctx, 2, 5, hi);
+
+  // Optional specular glow pixels on each petal tip (for rare varieties).
+  if (opts.glow) {
+    px(ctx, 7, 0, glow);
+    px(ctx, 2, 5, glow);
+    px(ctx, 11, 5, glow);
+  }
+
   return canvas;
 }
 
 // ---------- Fence (16x10) ----------
 
 function fenceWood(): HTMLCanvasElement {
-  // Weathered picket fence — pickets of varying heights with grain.
-  const { canvas, ctx } = makeCanvas(16, 10);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 9, 16, 1);
-  // Upper rail
-  rect(ctx, 0, 3, 16, 1, PAL.wood);
-  rect(ctx, 0, 4, 16, 1, PAL.woodDark);
-  // Lower rail
-  rect(ctx, 0, 7, 16, 1, PAL.wood);
-  rect(ctx, 0, 8, 16, 1, PAL.woodDark);
-  // Pickets (4 of them, pointed tops).
-  const xs = [1, 5, 9, 13];
+  // Weathered picket fence — thicker pickets, visible end-grain caps,
+  // horizontal rails with shadow, moss at the base.
+  const W = 18, H = 14;
+  const { canvas, ctx } = makeCanvas(W, H);
+  // Ground shadow
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(0, 13, W, 1);
+  ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.fillRect(1, 12, W - 2, 1);
+
+  // Horizontal rails (upper + lower), rendered as 2-pixel thick planks.
+  const drawRail = (yy: number) => {
+    rect(ctx, 0, yy,     W, 1, PAL.woodLight);
+    rect(ctx, 0, yy + 1, W, 1, PAL.wood);
+    rect(ctx, 0, yy + 2, W, 1, PAL.woodDark);
+  };
+  drawRail(4);
+  drawRail(9);
+
+  // Pickets with pointed tops — 4 of them.
+  const xs = [1, 6, 11, 16];
   for (const x of xs) {
+    // Shadow behind picket (slight offset right+down)
+    rect(ctx, x + 1, 1, 2, 12, "#00000030");
     // Picket body
-    rect(ctx, x, 2, 2, 7, PAL.wood);
-    // Left highlight
-    rect(ctx, x, 2, 1, 7, PAL.woodLight);
-    // Right shadow
-    rect(ctx, x + 1, 2, 1, 7, PAL.woodDark);
-    // Pointed top (single pixel tip)
-    px(ctx, x, 1, PAL.wood);
-    px(ctx, x, 0, PAL.woodLight);
-    // Nail dots on rails
-    px(ctx, x, 3, PAL.ironDark);
-    px(ctx, x, 7, PAL.ironDark);
-    // Grain
-    px(ctx, x + 1, 5, PAL.woodDark);
+    rect(ctx, x, 1, 2, 12, PAL.wood);
+    // Left highlight strip
+    rect(ctx, x, 1, 1, 12, PAL.woodLight);
+    // Right shadow strip
+    rect(ctx, x + 1, 1, 1, 12, PAL.woodDark);
+    // Pointed top (two-pixel tip)
+    px(ctx, x, 0, PAL.woodDark);
+    px(ctx, x + 1, 0, PAL.woodDark);
+    px(ctx, x, -1, PAL.wood); // no-op safe
+    // Grain lines
+    px(ctx, x + 1, 3, "#5c3c1e");
+    px(ctx, x,     7, "#3a2410");
+    px(ctx, x + 1, 10, "#3a2410");
+    // Nails
+    px(ctx, x,     5, PAL.ironDark);
+    px(ctx, x + 1, 5, "#4a4a55");
+    px(ctx, x,     10, PAL.ironDark);
+    px(ctx, x + 1, 10, "#4a4a55");
+    // Moss at base
+    if ((x & 1) === 1) px(ctx, x,     12, PAL.leaf);
+    px(ctx, x + 1, 12, PAL.leafDark);
   }
   return canvas;
 }
 
 function fenceIron(): HTMLCanvasElement {
-  // Wrought iron fence — spikes on top, decorative spheres, ornate mid-rail.
-  const { canvas, ctx } = makeCanvas(16, 10);
-  ctx.fillStyle = PAL.shadow; ctx.fillRect(0, 9, 16, 1);
-  // Mid rail (ornate — two lines)
-  rect(ctx, 0, 4, 16, 1, PAL.iron);
-  rect(ctx, 0, 6, 16, 1, PAL.iron);
-  // Bottom rail
-  rect(ctx, 0, 8, 16, 1, PAL.iron);
+  // Wrought iron fence — fleur-de-lis tips, decorative scrolls, brass finials,
+  // and stone base plinth.
+  const W = 18, H = 16;
+  const { canvas, ctx } = makeCanvas(W, H);
+  // Shadow on ground
+  ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(0, 15, W, 1);
+  ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.fillRect(1, 14, W - 2, 1);
+
+  // Stone plinth base
+  rect(ctx, 0, 12, W, 2, PAL.stone);
+  rect(ctx, 0, 12, W, 1, PAL.stoneLight);
+  rect(ctx, 0, 13, W, 1, PAL.stoneDark);
+  // Mortar lines on plinth
+  for (let x = 3; x < W; x += 5) px(ctx, x, 12, PAL.stoneDark);
+
+  // Upper rail + highlights
+  rect(ctx, 0, 5, W, 1, PAL.ironDark);
+  rect(ctx, 0, 6, W, 1, PAL.iron);
+  rect(ctx, 0, 7, W, 1, PAL.ironDark);
+  // Lower rail
+  rect(ctx, 0, 10, W, 1, PAL.ironDark);
+  rect(ctx, 0, 11, W, 1, PAL.iron);
+
   // Vertical bars
-  for (let x = 1; x < 16; x += 2) {
-    rect(ctx, x, 1, 1, 8, PAL.iron);
-    // Bar highlight
-    px(ctx, x, 2, PAL.stoneDark);
-    px(ctx, x, 3, PAL.stoneDark);
+  for (let x = 1; x < W; x += 2) {
+    rect(ctx, x, 2, 1, 10, PAL.iron);
+    // Highlight on left side of bar
+    px(ctx, x, 3, "#6a6a72");
+    px(ctx, x, 6, "#6a6a72");
+    px(ctx, x, 9, "#6a6a72");
   }
-  // Spike tips (fleur-de-lis style)
-  for (let x = 1; x < 16; x += 2) {
+
+  // Ornate scrollwork between rails (arcs between every 2 bars)
+  for (let x = 1; x < W - 2; x += 4) {
+    // Scroll shape — small curve
+    px(ctx, x + 1, 7, PAL.iron);
+    px(ctx, x + 2, 7, PAL.iron);
+    px(ctx, x + 3, 7, PAL.iron);
+    px(ctx, x + 1, 8, PAL.iron);
+    px(ctx, x + 3, 8, PAL.iron);
+    px(ctx, x + 2, 8, PAL.ironDark);
+  }
+
+  // Fleur-de-lis tips on every bar
+  for (let x = 1; x < W; x += 2) {
+    // Central spike
     px(ctx, x, 0, PAL.iron);
     px(ctx, x, 1, PAL.iron);
+    // Wings
+    if (x > 0) px(ctx, x - 1, 1, PAL.iron);
+    if (x < W - 1) px(ctx, x + 1, 1, PAL.iron);
   }
-  // Brass finials on every other bar
-  for (let x = 1; x < 16; x += 4) {
+  // Brass finial balls every 4 bars
+  for (let x = 1; x < W; x += 4) {
     px(ctx, x, 0, PAL.brass);
     px(ctx, x - 1, 1, PAL.brass);
     px(ctx, x + 1, 1, PAL.brass);
-    px(ctx, x, 1, PAL.brassDark);
+    px(ctx, x, 1, "#ffe8a3"); // specular
+    // Second brass sphere on mid-rail
+    px(ctx, x, 6, PAL.brass);
+    px(ctx, x, 11, PAL.brass);
   }
-  // Decorative spheres on mid-rail where brass bars meet
-  for (let x = 1; x < 16; x += 4) {
-    px(ctx, x, 5, PAL.brass);
+  return canvas;
+}
+
+function fenceStone(): HTMLCanvasElement {
+  // Low stone wall — irregular block pattern with moss + shadow. 18x12.
+  const W = 18, H = 12;
+  const { canvas, ctx } = makeCanvas(W, H);
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(0, 11, W, 1);
+  // Base fill
+  rect(ctx, 0, 1, W, 10, PAL.stoneDark);
+  // Courses of stones — two rows, offset.
+  const r = rng(42);
+  const drawBlock = (x: number, y: number, w: number, h: number) => {
+    const shadeClr = r() > 0.5 ? PAL.stone : "#7c7c82";
+    rect(ctx, x, y, w, h, shadeClr);
+    // Top highlight
+    rect(ctx, x, y, w, 1, PAL.stoneLight);
+    // Bottom shadow
+    rect(ctx, x, y + h - 1, w, 1, PAL.stoneDark);
+    // Right shadow
+    rect(ctx, x + w - 1, y, 1, h, PAL.stoneDark);
+    // Speckle
+    if (r() > 0.5) px(ctx, x + 1, y + 1, "#9a9aa0");
+  };
+  // Top row (4 blocks)
+  let x = 0;
+  while (x < W) {
+    const w = 4 + Math.floor(r() * 2);
+    drawBlock(x, 1, Math.min(w, W - x), 5);
+    x += w;
+  }
+  // Bottom row (offset by 2)
+  x = -2;
+  while (x < W) {
+    const w = 4 + Math.floor(r() * 2);
+    const dx = Math.max(x, 0);
+    const dw = Math.min(w - (dx - x), W - dx);
+    if (dw > 0) drawBlock(dx, 6, dw, 5);
+    x += w;
+  }
+  // Moss patches on top
+  for (let i = 0; i < 4; i++) {
+    const mx = Math.floor(r() * W);
+    px(ctx, mx, 1, PAL.leaf);
+    px(ctx, mx + 1, 1, PAL.leafDark);
   }
   return canvas;
 }
@@ -1308,6 +1512,9 @@ export function generateAllTextures(scene: Phaser.Scene) {
   register(scene, "flower_orange", flower(PAL.petalOrange));
   register(scene, "flower_blue", flower(PAL.petalBlue));
   register(scene, "flower_pink", flower(PAL.petalPink));
+  // Rare glowing varieties
+  register(scene, "flower_ghost", flower("#e6f4ff", { glow: true }));
+  register(scene, "flower_rose", flower("#c73838", { glow: true }));
 
   register(scene, "decor_wreath", decorWreath());
   register(scene, "decor_candle", decorCandle());
@@ -1315,6 +1522,7 @@ export function generateAllTextures(scene: Phaser.Scene) {
 
   register(scene, "fence_wood", fenceWood());
   register(scene, "fence_iron", fenceIron());
+  register(scene, "fence_stone", fenceStone());
 
   register(scene, "lantern_oil", lanternOil());
   register(scene, "lantern_brass", lanternBrass());
