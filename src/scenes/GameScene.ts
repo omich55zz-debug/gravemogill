@@ -93,7 +93,7 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(0x0b0b12);
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-    this.cameras.main.setZoom(CONFIG.UPSCALE);
+    this.cameras.main.setZoom(this.computeInitialZoom());
 
     // Terrain layer
     this.layerTerrain = this.add.container(0, 0).setDepth(-10);
@@ -114,18 +114,15 @@ export class GameScene extends Phaser.Scene {
       this.tileSprites.push(row);
     }
 
-    // Focus highlight (moves with player) — a diamond outline matching the iso tile.
-    const diamond = this.add.graphics();
-    diamond.lineStyle(1, 0xf0e7c8, 0.9);
-    diamond.beginPath();
-    diamond.moveTo(0, -CONFIG.ISO_H / 2);
-    diamond.lineTo(CONFIG.ISO_W / 2, 0);
-    diamond.lineTo(0, CONFIG.ISO_H / 2);
-    diamond.lineTo(-CONFIG.ISO_W / 2, 0);
-    diamond.closePath();
-    diamond.strokePath();
-    this.focusRect = diamond;
+    // Focus highlight — top-down square outline around the current tile.
+    const ring = this.add.graphics();
+    ring.lineStyle(2, 0xf0e7c8, 0.85);
+    ring.strokeRect(-CONFIG.ISO_W / 2 + 1, -CONFIG.ISO_H / 2 + 1, CONFIG.ISO_W - 2, CONFIG.ISO_H - 2);
+    this.focusRect = ring;
     this.focusRect.setDepth(5).setVisible(false);
+
+    // Static necropolis decor (chapel, mausoleums, statues, pre-placed graves).
+    this.placeNecropolisStructures();
 
     // Entities
     const spawn = this.grid.tileToWorldCenter(14, 17);
@@ -226,9 +223,10 @@ export class GameScene extends Phaser.Scene {
     this.weather.setKind(pickWeather());
     this.lastWeatherDay = this.gameTime.day;
 
-    // Resize handling
+    // Resize handling + camera zoom/pan controls
     this.scale.on("resize", () => this.refreshZoom());
     this.refreshZoom();
+    this.installCameraControls();
 
     // Save on tab close / hide (mobile + desktop). Removed on shutdown.
     const saveOnHide = () => this.saveNow();
@@ -723,15 +721,134 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private placeNecropolisStructures() {
+    // Large static props that make the map look like an existing necropolis.
+    // Positions are in tile coords. Each structure image is anchored at its
+    // bottom-centre and depth-sorted by its baseline y.
+    const place = (key: string, col: number, row: number, scale = 1) => {
+      const { x, y } = this.grid.tileToWorldCenter(col, row);
+      const img = this.add.image(x, y + CONFIG.ISO_H / 2, key)
+        .setOrigin(0.5, 1)
+        .setScale(scale)
+        .setDepth(y);
+      this.layerDecor.add(img);
+      return img;
+    };
+
+    // Entrance gate at top-centre, flanking the central aisle.
+    place("build_gate", 19, 2, 1);
+    // Chapel at top-left plaza.
+    place("build_chapel", 6, 5, 1);
+    // Mausoleums — two on left field, two on right field, symmetric.
+    place("build_mausoleum", 12, 6, 1);
+    place("build_mausoleum", 28, 6, 1);
+    place("build_mausoleum", 4, 17, 1);
+    place("build_mausoleum", 36, 17, 1);
+    // Big memorial cross at the cross-aisle intersection, slightly off-centre.
+    place("build_bigcross", 19, 15, 1);
+    // Small crypts scattered in the lower necropolis.
+    place("build_crypt", 8, 24, 1);
+    place("build_crypt", 15, 25, 1);
+    place("build_crypt", 24, 24, 1);
+    place("build_crypt", 32, 25, 1);
+
+    // Decorative pre-placed tombstones scattered across open plots so the
+    // cemetery looks lived-in from the start. These are NOT interactive
+    // graves (no grave data on the cell) — just art.
+    const propTombs = [
+      { key: "tomb_celtic",      col: 14, row: 8 },
+      { key: "tomb_broken",      col: 17, row: 8 },
+      { key: "tomb_stone",       col: 22, row: 8 },
+      { key: "tomb_wood",        col: 25, row: 10 },
+      { key: "tomb_marble",      col: 10, row: 12 },
+      { key: "tomb_stone",       col: 32, row: 14 },
+      { key: "tomb_broken",      col: 6,  row: 18 },
+      { key: "tomb_celtic",      col: 34, row: 20 },
+      { key: "tomb_obelisk",     col: 27, row: 18 },
+      { key: "tomb_angel",       col: 13, row: 20 },
+      { key: "tomb_wood",        col: 28, row: 22 },
+      { key: "tomb_stone",       col: 17, row: 27 },
+      { key: "tomb_broken",      col: 23, row: 27 },
+    ];
+    for (const t of propTombs) {
+      const cell = this.grid.at(t.col, t.row);
+      if (cell) cell.terrain = "hole"; // visual: sits on dirt
+      place(t.key, t.col, t.row, 1);
+    }
+
+    // Scatter a handful of flower tufts on grass between rows.
+    const propFlowers = [
+      { key: "flower_white",  col: 8,  row: 16 },
+      { key: "flower_yellow", col: 23, row: 16 },
+      { key: "flower_red",    col: 14, row: 21 },
+      { key: "flower_blue",   col: 26, row: 21 },
+      { key: "flower_purple", col: 5,  row: 24 },
+      { key: "flower_pink",   col: 35, row: 24 },
+      { key: "flower_ghost",  col: 19, row: 5  },
+      { key: "flower_rose",   col: 20, row: 27 },
+    ];
+    for (const f of propFlowers) place(f.key, f.col, f.row, 1.1);
+  }
+
   private refreshZoom() {
-    // Fit the cemetery into the viewport if it would overflow; otherwise use UPSCALE.
+    // Re-clamp zoom after a viewport resize so it never goes outside the
+    // minimum (fit-to-view) or maximum (close-up) range.
+    const z = Phaser.Math.Clamp(this.cameras.main.zoom, this.minZoom(), this.maxZoom());
+    this.cameras.main.setZoom(z);
+  }
+
+  private computeInitialZoom(): number {
+    // Default: somewhat close-up so the player feels "near" the ground.
+    return Phaser.Math.Clamp(CONFIG.UPSCALE, this.minZoom(), this.maxZoom());
+  }
+
+  private minZoom(): number {
     const vw = this.scale.width;
     const vh = this.scale.height;
-    const maxZoomX = vw / WORLD_W;
-    const maxZoomY = vh / WORLD_H;
-    const fitZoom = Math.min(maxZoomX, maxZoomY);
-    const zoom = Math.max(1, Math.min(CONFIG.UPSCALE, fitZoom * 1.8));
-    this.cameras.main.setZoom(zoom);
+    return Math.min(vw / WORLD_W, vh / WORLD_H, 1.0);
+  }
+
+  private maxZoom(): number {
+    return 3.5;
+  }
+
+  setCameraZoom(z: number) {
+    const zc = Phaser.Math.Clamp(z, this.minZoom(), this.maxZoom());
+    this.tweens.add({
+      targets: this.cameras.main, zoom: zc, duration: 180, ease: "Sine.Out",
+    });
+  }
+
+  zoomIn() { this.setCameraZoom(this.cameras.main.zoom * 1.25); }
+  zoomOut() { this.setCameraZoom(this.cameras.main.zoom / 1.25); }
+
+  private installCameraControls() {
+    // Mouse wheel zoom — zoom toward the cursor position by shifting camera.
+    this.input.on("wheel", (_p: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
+      if (this.uiModalOpen) return;
+      const factor = dy > 0 ? 0.9 : 1.1;
+      this.setCameraZoom(this.cameras.main.zoom * factor);
+    });
+
+    // Pinch-to-zoom on touch devices (tracking 2 active pointers).
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
+    this.input.on("pointermove", () => {
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1?.isDown && p2?.isDown) {
+        const d = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        if (pinchStartDist === 0) {
+          pinchStartDist = d;
+          pinchStartZoom = this.cameras.main.zoom;
+        } else if (d > 0) {
+          const z = pinchStartZoom * (d / pinchStartDist);
+          this.cameras.main.setZoom(Phaser.Math.Clamp(z, this.minZoom(), this.maxZoom()));
+        }
+      } else {
+        pinchStartDist = 0;
+      }
+    });
   }
 }
 

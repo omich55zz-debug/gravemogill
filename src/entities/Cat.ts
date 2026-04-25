@@ -13,7 +13,7 @@ export class Cat extends Phaser.Events.EventEmitter {
   private scene: Phaser.Scene;
   private targetX: number;
   private targetY: number;
-  private speed = 48;
+  private speed = 80;
   private crystalTimer = 0;
   private crystal?: Phaser.GameObjects.Image;
   private crystalIsRare = false;
@@ -23,8 +23,8 @@ export class Cat extends Phaser.Events.EventEmitter {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super();
     this.scene = scene;
-    this.shadow = scene.add.ellipse(x, y + 1, 10, 4, 0x000000, 0.35).setDepth(-1);
-    this.sprite = scene.add.image(x, y, "cat").setOrigin(0.5, 0.9).setDepth(0);
+    this.shadow = scene.add.ellipse(x, y + 2, 16, 6, 0x000000, 0.35).setDepth(-1);
+    this.sprite = scene.add.image(x, y, "cat").setOrigin(0.5, 0.9).setDepth(0).setScale(1.6);
     this.targetX = x;
     this.targetY = y;
   }

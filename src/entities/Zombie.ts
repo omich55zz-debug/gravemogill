@@ -34,35 +34,38 @@ export class Zombie extends Phaser.Events.EventEmitter {
     super();
     this.scene = scene;
     this.variant = variant;
-    this.shadow = scene.add.ellipse(x, y + 1, 14, 5, 0x000000, 0.35).setDepth(y - 0.1);
+    this.shadow = scene.add.ellipse(x, y + 2, 22, 8, 0x000000, 0.35).setDepth(y - 0.1);
     this.sprite = scene.add.image(x, y, "zombie")
       .setOrigin(0.5, 0.9)
       .setDepth(y + 5);
     this.sprite.setAlpha(0);
     this.sprite.y += 4;
 
+    const S = 1.6; // base scale matching player/cat for top-down view
     // Variant-specific tuning.
     switch (variant) {
       case "skinny":
-        this.sprite.setScale(1, 1.15);
+        this.sprite.setScale(S, S * 1.15);
         this.sprite.setTint(0xc7e4a3);
-        this.speed = 22;
+        this.speed = 40;
         this.lifetime = Phaser.Math.Between(8000, 14000);
         break;
       case "fat":
-        this.sprite.setScale(1.25, 0.95);
+        this.sprite.setScale(S * 1.25, S * 0.95);
         this.sprite.setTint(0x9fbf73);
-        this.shadow.setSize(18, 6);
-        this.speed = 9;
+        this.shadow.setSize(28, 10);
+        this.speed = 18;
         this.lifetime = Phaser.Math.Between(14000, 24000);
         break;
       case "headless":
+        this.sprite.setScale(S);
         this.sprite.setTint(0x8ca878);
-        this.speed = 16;
+        this.speed = 30;
         this.lifetime = Phaser.Math.Between(12000, 22000);
         break;
       default:
-        this.speed = 14;
+        this.sprite.setScale(S);
+        this.speed = 26;
         this.lifetime = Phaser.Math.Between(10000, 20000);
     }
 

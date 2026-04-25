@@ -34,16 +34,31 @@ export class Grid {
   }
 
   private seedPlots() {
-    // Reserve structured plot rows with a path spine in the middle.
-    // Rows 3,5,7,9,11,13 are plot rows; columns 2..25 in pairs with gaps at 13,14 (central aisle).
-    const plotRows = [3, 5, 7, 9, 11, 13, 15];
+    // Necropolis layout for a 40×30 map.
+    //
+    // Top of map (rows 0–6): chapel + gate area (kept mostly open grass,
+    // decorated by GameScene's placeNecropolisStructures()).
+    //
+    // Middle of map (rows 8–22): main grave field. Every second row is a
+    // plot row. A vertical aisle runs along columns 19–20 (grass → paths).
+    //
+    // Bottom of map (rows 24–28): outer ring of plots + scattered crypts.
+    const plotRows = [8, 10, 12, 14, 16, 18, 20, 22, 25, 27];
     for (const r of plotRows) {
-      for (let c = 2; c <= 25; c++) {
-        if (c === 13 || c === 14) continue;
+      for (let c = 3; c <= 36; c++) {
+        if (c === 19 || c === 20) continue; // central aisle
         this.cells[r][c].terrain = "plot";
       }
     }
-    // Central vertical aisle pre-painted grass (kept, paths optional by player).
+    // Pre-paved stone paths along the central aisle and the cross-aisle (row 15).
+    for (let r = 6; r <= 28; r++) {
+      this.cells[r][19].terrain = "path";
+      this.cells[r][20].terrain = "path";
+    }
+    for (let c = 4; c <= 35; c++) {
+      if (c === 19 || c === 20) continue;
+      this.cells[15][c].terrain = "path";
+    }
   }
 
   at(col: number, row: number): Cell | undefined {

@@ -65,6 +65,9 @@ export class UIScene extends Phaser.Scene {
     // Orders button (opens list of offered orders)
     this.createOrdersButton();
 
+    // Camera zoom buttons (+/-)
+    this.createZoomButtons();
+
     // Listeners
     this.economy.on("changed", () => this.refreshHud());
     this.gameTime.on("hourChanged", () => this.refreshHud());
@@ -265,6 +268,25 @@ export class UIScene extends Phaser.Scene {
     bg.on("pointerup", () => this.openOrdersList());
 
     this.scale.on("resize", () => btn.setPosition(this.scale.width - 90, 120));
+  }
+
+  // -------------- Camera zoom buttons --------------
+
+  private createZoomButtons() {
+    const make = (y: number, label: string, fn: () => void) => {
+      const c = this.add.container(this.scale.width - 30, y);
+      const bg = this.add.circle(0, 0, 18, 0x2a1f2f, 0.9).setStrokeStyle(1, 0x8c6a36);
+      const lbl = this.add.text(0, 0, label, { fontFamily: "sans-serif", fontSize: "18px", color: "#f0e7c8" }).setOrigin(0.5);
+      c.add([bg, lbl]);
+      bg.setInteractive({ useHandCursor: true }).on("pointerup", fn);
+      return { c, bg, lbl };
+    };
+    const plus = make(170, "+", () => this.game_.zoomIn());
+    const minus = make(210, "−", () => this.game_.zoomOut());
+    this.scale.on("resize", () => {
+      plus.c.setPosition(this.scale.width - 30, 170);
+      minus.c.setPosition(this.scale.width - 30, 210);
+    });
   }
 
   // -------------- Order offers --------------

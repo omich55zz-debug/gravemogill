@@ -93,70 +93,31 @@ function register(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement) {
  * Pixels outside the diamond stay transparent.
  */
 function makeIsoTile(flat: HTMLCanvasElement, lit = true): HTMLCanvasElement {
-  const fctx = flat.getContext("2d")!;
-  const flatImg = fctx.getImageData(0, 0, 16, 16);
-  const { canvas, ctx } = makeCanvas(32, 16);
-  const out = ctx.createImageData(32, 16);
-  for (let iy = 0; iy < 16; iy++) {
-    for (let ix = 0; ix < 32; ix++) {
-      const dx = ix - 16;
-      // Diamond mask: |x-16| + 2|y-8| <= 16
-      if (Math.abs(dx) + 2 * Math.abs(iy - 8) > 16) continue;
-      const u = Math.floor(iy + dx / 2);
-      const v = Math.floor(iy - dx / 2);
-      if (u < 0 || u >= 16 || v < 0 || v >= 16) continue;
-      const si = (v * 16 + u) * 4;
-      const di = (iy * 32 + ix) * 4;
-      out.data[di]     = flatImg.data[si];
-      out.data[di + 1] = flatImg.data[si + 1];
-      out.data[di + 2] = flatImg.data[si + 2];
-      out.data[di + 3] = flatImg.data[si + 3];
-    }
-  }
-  ctx.putImageData(out, 0, 0);
-
+  // Top-down 32×32 tile. 2× nearest-neighbour upscale of the flat 16×16 canvas,
+  // then optional edge shading (top-left highlight, bottom-right shadow) so
+  // the tile grid still reads as lit 3D blocks rather than a flat carpet.
+  const { canvas, ctx } = makeCanvas(32, 32);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(flat, 0, 0, 16, 16, 0, 0, 32, 32);
   if (lit) {
-    // Light the diamond like a 3D tile lit from the top-left.
-    // Walk the diamond perimeter and brighten top-left edges, darken bottom-right.
-    // Top edges: top-left (0..16 along x, 8..0 along y) + top-right (16..32 along x, 0..8 along y)
-    // Bottom edges mirror.
-    const shadeDelta = (ix: number, iy: number, delta: number) => {
-      const dx = ix - 16;
-      if (Math.abs(dx) + 2 * Math.abs(iy - 8) > 16) return;
-      const idx = (iy * 32 + ix) * 4;
-      const a = out.data[idx + 3];
-      if (a < 8) return;
-      out.data[idx]     = Math.max(0, Math.min(255, out.data[idx] + delta));
-      out.data[idx + 1] = Math.max(0, Math.min(255, out.data[idx + 1] + delta));
-      out.data[idx + 2] = Math.max(0, Math.min(255, out.data[idx + 2] + delta));
-    };
-    // Top-left edge run: from (0, 8) up to (16, 0)
-    for (let i = 0; i <= 16; i++) {
-      const ix = i;
-      const iy = 8 - Math.round(i / 2);
-      shadeDelta(ix, iy, 28);
-      shadeDelta(ix + 1, iy, 14);
-    }
-    // Top-right edge: from (16, 0) down to (31, 7). This edge is *slightly* lit.
-    for (let i = 0; i <= 16; i++) {
-      const ix = 16 + i;
-      const iy = 0 + Math.round(i / 2);
-      shadeDelta(ix, iy, 10);
-    }
-    // Bottom-right edge: from (31, 8) down to (16, 15). Darken.
-    for (let i = 0; i <= 16; i++) {
-      const ix = 31 - i;
-      const iy = 8 + Math.round(i / 2);
-      shadeDelta(ix, iy, -30);
-      shadeDelta(ix, iy + 1, -16);
-    }
-    // Bottom-left edge: from (0, 7) to (16, 15). Mild shadow.
-    for (let i = 0; i <= 16; i++) {
-      const ix = 0 + i;
-      const iy = 7 + Math.round(i / 2);
-      shadeDelta(ix, iy, -14);
-    }
-    ctx.putImageData(out, 0, 0);
+    // Top highlight
+    ctx.fillStyle = "rgba(255,244,210,0.16)";
+    ctx.fillRect(0, 0, 32, 1);
+    ctx.fillStyle = "rgba(255,244,210,0.09)";
+    ctx.fillRect(0, 1, 32, 1);
+    // Left highlight
+    ctx.fillStyle = "rgba(255,244,210,0.12)";
+    ctx.fillRect(0, 0, 1, 32);
+    // Bottom shadow (stronger, two rows)
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
+    ctx.fillRect(0, 31, 32, 1);
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(0, 30, 32, 1);
+    // Right shadow
+    ctx.fillStyle = "rgba(0,0,0,0.24)";
+    ctx.fillRect(31, 0, 1, 32);
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.fillRect(30, 0, 1, 32);
   }
   return canvas;
 }
@@ -1345,6 +1306,238 @@ function tombAngelHead(): HTMLCanvasElement {
   return canvas;
 }
 
+// ---------- Static necropolis buildings ----------
+
+/** A small stone mausoleum with pillars, arched door, and cross. 48×64. */
+function buildingMausoleum(): HTMLCanvasElement {
+  const W = 48, H = 64;
+  const { canvas, ctx } = makeCanvas(W, H);
+  // Ground shadow
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 2, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+  // Base plinth (wide slab)
+  rect(ctx, 2, H - 8, W - 4, 6, PAL.stoneDark);
+  rect(ctx, 2, H - 8, W - 4, 1, PAL.stone);
+  // Main body (block)
+  rect(ctx, 6, 18, W - 12, H - 26, PAL.stone);
+  // Shaded right wall
+  rect(ctx, W - 8, 18, 2, H - 26, PAL.stoneDark);
+  // Left highlight
+  rect(ctx, 6, 18, 2, H - 26, PAL.stoneLight);
+  // Stone block seams
+  for (let y = 24; y < H - 10; y += 8) rect(ctx, 8, y, W - 16, 1, PAL.stoneDark);
+  for (let x = 12; x < W - 10; x += 10) rect(ctx, x, 20, 1, H - 30, PAL.stoneDark);
+  // Pillars (left and right)
+  rect(ctx, 4, 12, 3, H - 20, PAL.stoneLight);
+  rect(ctx, 5, 12, 2, H - 20, PAL.stone);
+  rect(ctx, W - 7, 12, 3, H - 20, PAL.stoneLight);
+  rect(ctx, W - 6, 12, 2, H - 20, PAL.stone);
+  // Pillar bases and caps
+  rect(ctx, 3, 10, 5, 3, PAL.stoneDark);
+  rect(ctx, W - 8, 10, 5, 3, PAL.stoneDark);
+  rect(ctx, 3, H - 10, 5, 3, PAL.stoneDark);
+  rect(ctx, W - 8, H - 10, 5, 3, PAL.stoneDark);
+  // Triangular pediment (roof)
+  for (let i = 0; i < 12; i++) {
+    rect(ctx, 4 + i, 12 - i, W - 8 - i * 2, 1, PAL.stoneDark);
+    if (i < 6) rect(ctx, 4 + i, 12 - i, 1, 1, PAL.stoneLight);
+  }
+  // Cross atop the pediment
+  rect(ctx, W / 2 - 1, 0, 2, 6, PAL.gold);
+  rect(ctx, W / 2 - 3, 2, 6, 2, PAL.gold);
+  // Arched doorway
+  rect(ctx, W / 2 - 5, 28, 10, 20, "#1a1018");
+  // Door arch curve top (approximate)
+  rect(ctx, W / 2 - 6, 26, 12, 2, "#1a1018");
+  rect(ctx, W / 2 - 7, 24, 14, 2, "#1a1018");
+  // Door panel highlights (wood-ish interior)
+  rect(ctx, W / 2 - 4, 32, 8, 14, "#2a1a18");
+  rect(ctx, W / 2 - 4, 32, 1, 14, "#3a2a24");
+  // Door small cross panel
+  rect(ctx, W / 2, 36, 1, 8, "#5c4a30");
+  rect(ctx, W / 2 - 2, 39, 5, 1, "#5c4a30");
+  // Moss at base corners
+  px(ctx, 4, H - 10, PAL.leaf);
+  px(ctx, W - 5, H - 10, PAL.leaf);
+  px(ctx, 5, H - 9, PAL.leafDark);
+  return canvas;
+}
+
+/** A chapel with steeple, stained-glass window, arched door. 96×128. */
+function buildingChapel(): HTMLCanvasElement {
+  const W = 96, H = 128;
+  const { canvas, ctx } = makeCanvas(W, H);
+  // Ground shadow
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 3, 44, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // Foundation slab
+  rect(ctx, 4, H - 10, W - 8, 8, PAL.stoneDark);
+  rect(ctx, 4, H - 10, W - 8, 1, PAL.stone);
+  // Main nave (large block)
+  const naveY = 50, naveH = H - 60;
+  rect(ctx, 10, naveY, W - 20, naveH, PAL.stone);
+  // Stone seams
+  for (let y = naveY + 8; y < H - 12; y += 10) rect(ctx, 12, y, W - 24, 1, PAL.stoneDark);
+  rect(ctx, 10, naveY, 2, naveH, PAL.stoneLight);
+  rect(ctx, W - 12, naveY, 2, naveH, PAL.stoneDark);
+  // Roof — steep pitched (light + shade)
+  for (let i = 0; i < 24; i++) {
+    const y = naveY - 24 + i;
+    rect(ctx, 8 + i, y, W - 16 - i * 2, 1, shade("#4a2820", -i));
+    if (i < 12) rect(ctx, 8 + i, y, 2, 1, shade("#4a2820", 10));
+  }
+  // Steeple column (central tower)
+  rect(ctx, W / 2 - 8, 20, 16, naveY - 24 - 20 + 4, PAL.stoneLight);
+  rect(ctx, W / 2 - 8, 20, 2, naveY - 24 - 20 + 4, "#ebebf0");
+  rect(ctx, W / 2 + 6, 20, 2, naveY - 24 - 20 + 4, PAL.stoneDark);
+  // Steeple pyramid roof
+  for (let i = 0; i < 14; i++) {
+    rect(ctx, W / 2 - 8 + i, 20 - i, 16 - i * 2, 1, "#3a1a14");
+    if (i < 7) rect(ctx, W / 2 - 8 + i, 20 - i, 2, 1, "#5a2820");
+  }
+  // Cross on top of steeple
+  rect(ctx, W / 2 - 1, 0, 2, 10, PAL.gold);
+  rect(ctx, W / 2 - 4, 3, 8, 2, PAL.gold);
+  // Steeple window (pointed)
+  rect(ctx, W / 2 - 2, 24, 4, 6, "#f0dc7a");
+  rect(ctx, W / 2 - 1, 22, 2, 2, "#f0dc7a");
+  // Large stained-glass round window
+  const cx = W / 2, cy = naveY + 14;
+  ctx.fillStyle = "#2a1820"; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
+  const colours = ["#c73838", "#3b7ccf", "#d7c78b", "#6b9f54"];
+  for (let a = 0; a < 4; a++) {
+    ctx.fillStyle = colours[a];
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, a * Math.PI / 2, a * Math.PI / 2 + Math.PI / 2);
+    ctx.lineTo(cx, cy);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = "#1a1018";
+  ctx.fillRect(cx - 8, cy, 16, 1);
+  ctx.fillRect(cx, cy - 8, 1, 16);
+  // Two side windows (tall arched)
+  const drawArchWindow = (x: number) => {
+    rect(ctx, x, naveY + 20, 6, 16, "#2a1820");
+    rect(ctx, x + 1, naveY + 20, 4, 16, "#e0c878");
+    rect(ctx, x - 1, naveY + 18, 8, 2, "#2a1820");
+    rect(ctx, x, naveY + 18, 6, 2, "#c0a858");
+    // Cross mullion
+    rect(ctx, x + 2, naveY + 20, 2, 16, "#5a4a30");
+    rect(ctx, x, naveY + 27, 6, 1, "#5a4a30");
+  };
+  drawArchWindow(18);
+  drawArchWindow(W - 24);
+  // Grand doorway (arched double doors)
+  const doorW = 16, doorH = 30, doorX = W / 2 - doorW / 2, doorY = H - 10 - doorH;
+  rect(ctx, doorX - 2, doorY - 2, doorW + 4, 3, PAL.stoneDark); // arch
+  rect(ctx, doorX, doorY, doorW, doorH, "#3a1e14"); // doors
+  rect(ctx, doorX, doorY, 1, doorH, "#5a3820");
+  rect(ctx, doorX + doorW / 2, doorY, 1, doorH, "#1a0a08");
+  // Door rivets
+  for (let y = doorY + 4; y < doorY + doorH - 2; y += 8) {
+    px(ctx, doorX + 2, y, PAL.gold);
+    px(ctx, doorX + doorW - 3, y, PAL.gold);
+  }
+  // Steps
+  rect(ctx, doorX - 4, H - 10, doorW + 8, 2, PAL.stone);
+  rect(ctx, doorX - 2, H - 8, doorW + 4, 2, PAL.stoneDark);
+  return canvas;
+}
+
+/** A small crypt (square stone box). 32×40. */
+function buildingCrypt(): HTMLCanvasElement {
+  const W = 32, H = 40;
+  const { canvas, ctx } = makeCanvas(W, H);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 2, 14, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Body
+  rect(ctx, 2, 10, W - 4, H - 14, PAL.stone);
+  rect(ctx, 2, 10, 2, H - 14, PAL.stoneLight);
+  rect(ctx, W - 4, 10, 2, H - 14, PAL.stoneDark);
+  // Seams
+  rect(ctx, 4, 18, W - 8, 1, PAL.stoneDark);
+  rect(ctx, 4, 26, W - 8, 1, PAL.stoneDark);
+  // Flat roof slab
+  rect(ctx, 0, 6, W, 4, PAL.stoneDark);
+  rect(ctx, 0, 6, W, 1, PAL.stone);
+  // Cross on top
+  rect(ctx, W / 2 - 1, 0, 2, 6, PAL.stoneDark);
+  rect(ctx, W / 2 - 2, 2, 4, 1, PAL.stoneDark);
+  // Door
+  rect(ctx, W / 2 - 4, 20, 8, 14, "#1a1018");
+  rect(ctx, W / 2 - 3, 21, 6, 12, "#2a1a18");
+  rect(ctx, W / 2 - 3, 21, 1, 12, "#3a2a24");
+  px(ctx, W / 2 + 1, 28, PAL.brassDark);
+  // Moss
+  px(ctx, 3, H - 8, PAL.leaf);
+  px(ctx, W - 4, H - 8, PAL.leafDark);
+  return canvas;
+}
+
+/** Huge memorial stone cross. 28×64. */
+function buildingBigCross(): HTMLCanvasElement {
+  const W = 28, H = 64;
+  const { canvas, ctx } = makeCanvas(W, H);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 2, 12, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Stepped base
+  rect(ctx, 2, H - 12, W - 4, 10, PAL.stoneDark);
+  rect(ctx, 2, H - 12, W - 4, 1, PAL.stone);
+  rect(ctx, 4, H - 16, W - 8, 4, PAL.stone);
+  rect(ctx, 4, H - 16, W - 8, 1, PAL.stoneLight);
+  // Cross vertical
+  rect(ctx, W / 2 - 3, 4, 6, H - 20, PAL.stone);
+  rect(ctx, W / 2 - 3, 4, 2, H - 20, PAL.stoneLight);
+  rect(ctx, W / 2 + 1, 4, 2, H - 20, PAL.stoneDark);
+  // Cross horizontal
+  rect(ctx, W / 2 - 10, 20, 20, 6, PAL.stone);
+  rect(ctx, W / 2 - 10, 20, 20, 1, PAL.stoneLight);
+  rect(ctx, W / 2 - 10, 25, 20, 1, PAL.stoneDark);
+  // Moss
+  px(ctx, W / 2 - 2, H - 14, PAL.leaf);
+  px(ctx, W / 2 + 2, 22, PAL.leafDark);
+  // INRI plaque
+  rect(ctx, W / 2 - 3, 8, 6, 3, PAL.gold);
+  rect(ctx, W / 2 - 3, 8, 6, 1, "#ffe8a3");
+  return canvas;
+}
+
+/** A stone gate / archway entrance. 48×64. */
+function buildingGate(): HTMLCanvasElement {
+  const W = 48, H = 64;
+  const { canvas, ctx } = makeCanvas(W, H);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 2, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+  // Left pillar
+  rect(ctx, 2, 10, 10, H - 14, PAL.stone);
+  rect(ctx, 2, 10, 2, H - 14, PAL.stoneLight);
+  rect(ctx, 10, 10, 2, H - 14, PAL.stoneDark);
+  // Right pillar
+  rect(ctx, W - 12, 10, 10, H - 14, PAL.stone);
+  rect(ctx, W - 12, 10, 2, H - 14, PAL.stoneLight);
+  rect(ctx, W - 4, 10, 2, H - 14, PAL.stoneDark);
+  // Pillar caps
+  rect(ctx, 0, 8, 14, 4, PAL.stoneDark);
+  rect(ctx, W - 14, 8, 14, 4, PAL.stoneDark);
+  // Top archway beam
+  rect(ctx, 8, 4, W - 16, 6, PAL.stoneDark);
+  rect(ctx, 8, 4, W - 16, 1, PAL.stone);
+  // Iron gate between pillars
+  for (let x = 14; x < W - 14; x += 4) {
+    rect(ctx, x, 14, 1, H - 18, PAL.iron);
+    px(ctx, x, 12, PAL.iron);
+    px(ctx, x, 13, PAL.iron);
+  }
+  rect(ctx, 12, 28, W - 24, 1, PAL.iron);
+  // Brass finials on pillars
+  px(ctx, 6, 6, PAL.brass); px(ctx, 7, 6, PAL.brass);
+  px(ctx, W - 7, 6, PAL.brass); px(ctx, W - 8, 6, PAL.brass);
+  // Cross on archway top
+  rect(ctx, W / 2 - 1, 0, 2, 5, PAL.gold);
+  rect(ctx, W / 2 - 2, 1, 4, 1, PAL.gold);
+  return canvas;
+}
+
 // ---------- New flowers (orange, blue, pink) ----------
 // The existing flower() helper is generic; we just pass new palette colours.
 
@@ -1528,6 +1721,13 @@ export function generateAllTextures(scene: Phaser.Scene) {
   register(scene, "lantern_brass", lanternBrass());
 
   register(scene, "statue_angel", statueAngel());
+
+  // Static necropolis structures
+  register(scene, "build_mausoleum", buildingMausoleum());
+  register(scene, "build_chapel", buildingChapel());
+  register(scene, "build_crypt", buildingCrypt());
+  register(scene, "build_bigcross", buildingBigCross());
+  register(scene, "build_gate", buildingGate());
 
   // Preallocate a pool of client portraits (deterministic seeds).
   for (let i = 0; i < 8; i++) {

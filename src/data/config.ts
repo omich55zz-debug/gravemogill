@@ -1,14 +1,15 @@
 export const CONFIG = {
-  // Logical pixel grid. Kept for game logic (costs, rewards, etc.).
-  TILE: 16,
-  UPSCALE: 2,
-  // World size in tiles.
-  COLS: 28,
-  ROWS: 20,
-  // Isometric tile footprint (diamond). 2:1 ratio, classic iso.
-  // Centres are spaced by ISO_W/2 horizontally and ISO_H/2 vertically.
+  // Logical tile size (world pixels per cell).
+  TILE: 32,
+  // Default camera zoom (will be clamped against the viewport-fit logic).
+  UPSCALE: 2.0,
+  // World size in tiles. Grown vs. the old 28×20 so there's room for a proper
+  // necropolis layout with chapel, mausoleums and blocks of pre-placed graves.
+  COLS: 40,
+  ROWS: 30,
+  // Top-down square tile footprint (world pixels).
   ISO_W: 32,
-  ISO_H: 16,
+  ISO_H: 32,
   // Day length (ms) — one in-game day.
   DAY_MS: 90_000,
   STARTING_MONEY: 400,
@@ -25,26 +26,23 @@ export const CONFIG = {
 
 export const TILE_PX = CONFIG.TILE;
 
-// Iso world bounds in logical pixels.
-// Top-of-diamond for cell (0,0) is at (OFFSET_X, 0). Down-most tip is at
-// (col=COLS-1,row=ROWS-1). Max screen x is at (col=COLS-1,row=0), min at (0,ROWS-1).
-export const OFFSET_X = (CONFIG.ROWS - 1) * (CONFIG.ISO_W / 2) + CONFIG.ISO_W / 2;
-export const WORLD_W = (CONFIG.COLS + CONFIG.ROWS) * (CONFIG.ISO_W / 2);
-export const WORLD_H = (CONFIG.COLS + CONFIG.ROWS) * (CONFIG.ISO_H / 2) + CONFIG.ISO_H;
+// World size in world pixels.
+export const OFFSET_X = CONFIG.ISO_W / 2;
+export const WORLD_W = CONFIG.COLS * CONFIG.ISO_W;
+export const WORLD_H = CONFIG.ROWS * CONFIG.ISO_H;
 
-/** Convert (col,row) tile index to iso logical pixel world position (centre of tile). */
+/** Convert (col,row) tile index to world pixel position (centre of tile). */
 export function tileToIso(col: number, row: number): { x: number; y: number } {
   return {
-    x: (col - row) * (CONFIG.ISO_W / 2) + OFFSET_X,
-    y: (col + row) * (CONFIG.ISO_H / 2) + CONFIG.ISO_H / 2,
+    x: col * CONFIG.ISO_W + CONFIG.ISO_W / 2,
+    y: row * CONFIG.ISO_H + CONFIG.ISO_H / 2,
   };
 }
 
-/** Inverse: iso logical pixel to (col,row). Returns fractional tile coords. */
+/** Inverse: world pixel to (col,row). Returns fractional tile coords. */
 export function isoToTile(x: number, y: number): { col: number; row: number } {
-  const ix = x - OFFSET_X;
-  const iy = y - CONFIG.ISO_H / 2;
-  const col = (ix / (CONFIG.ISO_W / 2) + iy / (CONFIG.ISO_H / 2)) / 2;
-  const row = (iy / (CONFIG.ISO_H / 2) - ix / (CONFIG.ISO_W / 2)) / 2;
-  return { col, row };
+  return {
+    col: (x - CONFIG.ISO_W / 2) / CONFIG.ISO_W,
+    row: (y - CONFIG.ISO_H / 2) / CONFIG.ISO_H,
+  };
 }
