@@ -31,3 +31,15 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 new Phaser.Game(config);
+
+// Register the service worker so the PWA works offline.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    // sw.js lives at the base URL (public/ → dist/). Using a relative path
+    // lets the same build work under / and /<repo-name>/ hosts (GitHub Pages).
+    const swUrl = new URL("./sw.js", document.baseURI).toString();
+    navigator.serviceWorker.register(swUrl).catch(() => {
+      /* ignore: offline mode is a nice-to-have. */
+    });
+  });
+}
