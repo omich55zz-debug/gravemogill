@@ -189,62 +189,241 @@ function tilePath(): HTMLCanvasElement {
 // ---------- Character sprites ----------
 
 function playerSprite(): HTMLCanvasElement {
-  // 16x20 — front-facing gravedigger. Mr. Korolev.
-  const { canvas, ctx } = makeCanvas(16, 20);
-  // shadow
+  // 20x28 — Mr. Korolev. Front-facing Victorian-era gravedigger with top hat,
+  // frock coat, grey mustache/beard, cravat, boots, shovel in right hand.
+  const W = 20, H = 28;
+  const { canvas, ctx } = makeCanvas(W, H);
+
+  const skin = PAL.skin;
+  const skinShade = "#b89170";
+  const coatMain = "#1a1822";
+  const coatHi = "#2e2c3a";
+  const coatLo = "#0c0a12";
+  const shirt = "#e5dcc0";
+  const cravat = "#4a1a24";
+  const cravatHi = "#7a2a38";
+  const hatMain = "#09090e";
+  const hatHi = "#1a1a25";
+  const hatBand = "#5a1a20";
+  const bootMain = "#20160c";
+  const bootHi = "#3a2410";
+  const gloveMain = "#1e1c26";
+  const hairGrey = "#8a8695";
+  const hairGreyHi = "#b4b0c0";
+  const shovelShaft = "#6a4a22";
+  const shovelShaftHi = "#8c6636";
+  const shovelHead = "#6c6c74";
+  const shovelHeadHi = "#a6a6b0";
+  const shovelHeadLo = "#3a3a42";
+
+  // soft oval ground shadow
   ctx.fillStyle = PAL.shadow;
   ctx.beginPath();
-  ctx.ellipse(8, 19, 5, 1.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(10, 27, 7, 1.8, 0, 0, Math.PI * 2);
   ctx.fill();
-  // legs
-  rect(ctx, 5, 15, 2, 4, PAL.graniteDark);
-  rect(ctx, 9, 15, 2, 4, PAL.graniteDark);
-  // coat
-  rect(ctx, 3, 8, 10, 8, PAL.coat);
-  // coat highlights
-  rect(ctx, 4, 9, 1, 6, "#3a3a45");
-  // buttons
-  px(ctx, 8, 10, PAL.brass);
-  px(ctx, 8, 13, PAL.brass);
-  // shirt collar
-  rect(ctx, 7, 7, 2, 1, PAL.white);
-  // head
-  rect(ctx, 5, 3, 6, 5, PAL.skin);
-  // hat (top hat-ish)
-  rect(ctx, 4, 0, 8, 3, PAL.hat);
-  rect(ctx, 3, 2, 10, 1, PAL.hat);
-  // eyes
-  px(ctx, 6, 5, PAL.eye);
-  px(ctx, 9, 5, PAL.eye);
-  // mustache
-  rect(ctx, 6, 7, 4, 1, PAL.eye);
+
+  // -- Boots --
+  rect(ctx, 7, 25, 3, 2, bootMain);
+  rect(ctx, 11, 25, 3, 2, bootMain);
+  px(ctx, 7, 25, bootHi);
+  px(ctx, 11, 25, bootHi);
+  // Boot shadow
+  rect(ctx, 7, 26, 3, 1, "#0a0806");
+  rect(ctx, 11, 26, 3, 1, "#0a0806");
+
+  // -- Legs / trousers (visible strip between coat tails) --
+  rect(ctx, 8, 22, 2, 3, "#23212c");
+  rect(ctx, 11, 22, 2, 3, "#23212c");
+
+  // -- Coat body --
+  // Long coat with tails: silhouette as two stacked shapes.
+  // Shoulders/chest
+  rect(ctx, 4, 12, 12, 6, coatMain);
+  // Taper to waist
+  rect(ctx, 5, 18, 10, 3, coatMain);
+  // Tails (split in middle)
+  rect(ctx, 5, 21, 4, 4, coatMain);
+  rect(ctx, 11, 21, 4, 4, coatMain);
+  // Coat highlights (left side)
+  rect(ctx, 4, 12, 1, 6, coatHi);
+  rect(ctx, 5, 18, 1, 3, coatHi);
+  rect(ctx, 5, 21, 1, 4, coatHi);
+  // Coat shadow (right side)
+  rect(ctx, 15, 12, 1, 6, coatLo);
+  rect(ctx, 14, 18, 1, 3, coatLo);
+  rect(ctx, 14, 21, 1, 4, coatLo);
+  // Lapels (V shape)
+  px(ctx, 8, 12, coatHi);
+  px(ctx, 11, 12, coatHi);
+  px(ctx, 9, 13, coatHi);
+  px(ctx, 10, 13, coatHi);
+  // Shirt + cravat showing at chest
+  rect(ctx, 9, 12, 2, 2, shirt);
+  px(ctx, 10, 14, cravat);
+  px(ctx, 9, 14, cravat);
+  px(ctx, 9, 15, cravat);
+  px(ctx, 10, 15, cravatHi);
+  // Buttons (single column)
+  px(ctx, 10, 17, PAL.brass);
+  px(ctx, 10, 19, PAL.brass);
+  px(ctx, 10, 21, PAL.brass);
+
+  // -- Arms --
+  // Right arm down holding shovel; left arm at side.
+  rect(ctx, 3, 13, 1, 5, coatMain); // left arm
+  rect(ctx, 16, 13, 1, 5, coatMain); // right arm (shovel side)
+  // Gloves (hands)
+  px(ctx, 3, 18, gloveMain);
+  px(ctx, 16, 18, gloveMain);
+
+  // -- Head --
+  rect(ctx, 7, 6, 6, 6, skin);
+  // Jawline shade
+  rect(ctx, 7, 11, 6, 1, skinShade);
+  // Neck (small)
+  rect(ctx, 9, 12, 2, 1, skinShade);
+  // Hair — greying temples peeking below hat
+  px(ctx, 7, 6, hairGrey);
+  px(ctx, 7, 7, hairGrey);
+  px(ctx, 12, 6, hairGrey);
+  px(ctx, 12, 7, hairGrey);
+  // Ears
+  px(ctx, 6, 8, skinShade);
+  px(ctx, 13, 8, skinShade);
+  // Eyes — deep-set with highlight
+  px(ctx, 8, 8, PAL.eye);
+  px(ctx, 11, 8, PAL.eye);
+  px(ctx, 8, 8 - 0, PAL.eye); // emphasise
+  // Eyebrows
+  px(ctx, 8, 7, hairGreyHi);
+  px(ctx, 11, 7, hairGreyHi);
+  // Nose shadow
+  px(ctx, 9, 9, skinShade);
+  px(ctx, 10, 9, skinShade);
+  // Mustache (curled)
+  rect(ctx, 8, 10, 4, 1, hairGrey);
+  px(ctx, 7, 10, hairGreyHi);
+  px(ctx, 12, 10, hairGreyHi);
+  // Beard (short, under mouth)
+  rect(ctx, 9, 11, 2, 1, hairGrey);
+
+  // -- Top hat --
+  // Wide brim
+  rect(ctx, 5, 5, 10, 1, hatMain);
+  rect(ctx, 5, 5, 10, 1, hatMain);
+  rect(ctx, 6, 4, 8, 1, hatMain);
+  // Crown
+  rect(ctx, 7, 0, 6, 5, hatMain);
+  // Crown highlight (silk sheen)
+  rect(ctx, 7, 0, 1, 5, hatHi);
+  px(ctx, 8, 0, hatHi);
+  // Hat band
+  rect(ctx, 7, 4, 6, 1, hatBand);
+
+  // -- Shovel in right hand --
+  // Shaft (diagonal-ish, drawn as vertical for simplicity)
+  rect(ctx, 17, 12, 1, 10, shovelShaft);
+  px(ctx, 17, 12, shovelShaftHi);
+  px(ctx, 17, 15, shovelShaftHi);
+  px(ctx, 17, 18, shovelShaftHi);
+  // Handle (T-grip)
+  rect(ctx, 16, 11, 3, 1, shovelShaft);
+  px(ctx, 16, 11, shovelShaftHi);
+  px(ctx, 18, 11, shovelShaftHi);
+  // Blade (trapezoid at bottom)
+  rect(ctx, 16, 22, 3, 3, shovelHead);
+  px(ctx, 16, 22, shovelHeadHi);
+  px(ctx, 18, 22, shovelHeadHi);
+  px(ctx, 16, 24, shovelHeadLo);
+  px(ctx, 18, 24, shovelHeadLo);
+  px(ctx, 17, 25, shovelHeadLo);
+
   return canvas;
 }
 
 function catSprite(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(14, 12);
+  // 18x14 — black cat with white chest bib, yellow-green eyes, elegant tail.
+  const W = 18, H = 14;
+  const { canvas, ctx } = makeCanvas(W, H);
+
+  const furMain = "#1e1c24";
+  const furHi = "#3a3844";
+  const furLo = "#0c0a10";
+  const bib = "#ddd3b4";
+  const bibShade = "#a89e82";
+  const eye = "#9edc55";
+  const eyeCore = "#1a2010";
+  const pink = "#c87080";
+  const pinkLo = "#8a4050";
+
+  // ground shadow
   ctx.fillStyle = PAL.shadow;
-  ctx.fillRect(2, 11, 10, 1);
-  // body
-  rect(ctx, 2, 6, 8, 4, PAL.catGrey);
-  // head
-  rect(ctx, 8, 4, 5, 4, PAL.catGrey);
-  // ears
-  px(ctx, 8, 3, PAL.catGrey);
-  px(ctx, 12, 3, PAL.catGrey);
-  // tail
-  rect(ctx, 0, 5, 2, 1, PAL.catGrey);
-  px(ctx, 0, 4, PAL.catGrey);
-  // eyes
-  px(ctx, 10, 5, "#e6e64a");
-  px(ctx, 12, 5, "#e6e64a");
-  // legs
-  rect(ctx, 3, 10, 1, 2, PAL.catGreyDark);
-  rect(ctx, 5, 10, 1, 2, PAL.catGreyDark);
-  rect(ctx, 8, 10, 1, 2, PAL.catGreyDark);
-  rect(ctx, 10, 10, 1, 2, PAL.catGreyDark);
-  // nose
-  px(ctx, 12, 6, "#d06070");
+  ctx.beginPath();
+  ctx.ellipse(9, 13, 6, 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tail — curls up at tip
+  rect(ctx, 0, 7, 2, 2, furMain);
+  rect(ctx, 1, 6, 2, 1, furMain);
+  rect(ctx, 2, 5, 2, 1, furMain);
+  rect(ctx, 1, 8, 1, 1, furHi);
+  px(ctx, 3, 4, furHi);
+
+  // Body
+  rect(ctx, 3, 7, 9, 5, furMain);
+  rect(ctx, 3, 7, 9, 1, furHi);
+  rect(ctx, 3, 11, 9, 1, furLo);
+
+  // Belly/chest bib
+  rect(ctx, 7, 9, 4, 3, bib);
+  px(ctx, 7, 11, bibShade);
+  px(ctx, 10, 11, bibShade);
+
+  // Legs
+  rect(ctx, 3, 12, 2, 2, furMain);
+  rect(ctx, 6, 12, 2, 2, furMain);
+  rect(ctx, 9, 12, 2, 2, furMain);
+  // White socks on front paws
+  px(ctx, 7, 13, bib);
+  px(ctx, 10, 13, bib);
+  px(ctx, 4, 13, furLo);
+
+  // Head
+  rect(ctx, 11, 4, 6, 6, furMain);
+  // Head highlight
+  rect(ctx, 11, 4, 6, 1, furHi);
+  rect(ctx, 11, 5, 1, 5, furHi);
+  // Head shadow on far side
+  rect(ctx, 16, 5, 1, 5, furLo);
+
+  // Ears (pointy triangles)
+  rect(ctx, 11, 3, 2, 1, furMain);
+  rect(ctx, 15, 3, 2, 1, furMain);
+  px(ctx, 12, 2, furMain);
+  px(ctx, 16, 2, furMain);
+  // Inner ear pink
+  px(ctx, 12, 3, pink);
+  px(ctx, 16, 3, pink);
+
+  // Eyes — big and luminous
+  rect(ctx, 12, 6, 2, 2, eye);
+  rect(ctx, 15, 6, 2, 2, eye);
+  px(ctx, 13, 7, eyeCore);
+  px(ctx, 16, 7, eyeCore);
+  // Eye shine
+  px(ctx, 12, 6, "#c0ff80");
+  px(ctx, 15, 6, "#c0ff80");
+
+  // Nose & mouth
+  px(ctx, 14, 8, pink);
+  px(ctx, 14, 9, pinkLo);
+  px(ctx, 13, 9, furLo);
+  px(ctx, 15, 9, furLo);
+
+  // Whiskers (hints)
+  px(ctx, 11, 8, "#a09cb0");
+  px(ctx, 17, 8, "#a09cb0");
+
   return canvas;
 }
 
