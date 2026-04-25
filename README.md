@@ -1,4 +1,8 @@
-# Кладбище мистера Королёва (`gravemogils`)
+# Кладбище мистера Королёва (`gravemogill`)
+
+**[Играть в браузере (GitHub Pages)](https://omich55zz-debug.github.io/gravemogill/)** · **[Скачать Android APK (debug)](https://omich55zz-debug.github.io/gravemogill/gravemogill-debug.apk)**
+
+> Чтобы ссылки заработали, владельцу репо нужно один раз включить GitHub Pages: Settings → Pages → Source → Deploy from a branch → `gh-pages` / `/`.
 
 Top-down тайм-менеджер / симулятор кладбища для Android и iOS.
 
