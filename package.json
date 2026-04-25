@@ -1,0 +1,32 @@
+{
+  "name": "gravemogils",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Кладбище мистера Королёва — top-down тайм-менеджер / симулятор кладбища для Android и iOS (Phaser 3 + Capacitor).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "cap:init": "cap init \"Кладбище мистера Королёва\" ru.gravemogils.app --web-dir=dist",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "npm run build && cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "cap:run:android": "npm run build && cap sync && cap run android",
+    "cap:run:ios": "npm run build && cap sync && cap run ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.10"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
+    "phaser": "^3.90.0"
+  }
+}

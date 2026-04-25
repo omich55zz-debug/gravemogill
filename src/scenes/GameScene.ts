@@ -1,0 +1,420 @@
+import Phaser from "phaser";
+import { CONFIG, WORLD_W, WORLD_H } from "../data/config";
+import { Grid, type Cell } from "../utils/grid";
+import { Player } from "../entities/Player";
+import { Cat } from "../entities/Cat";
+import { Economy } from "../systems/Economy";
+import { TimeSystem } from "../systems/TimeSystem";
+import { OrderSystem, type Order } from "../systems/OrderSystem";
+import { itemById, type CatalogItem } from "../data/catalog";
+
+interface DecorationInstance {
+  item: CatalogItem;
+  image: Phaser.GameObjects.Image;
+}
+
+interface GraveVisual {
+  tombstone?: Phaser.GameObjects.Image;
+  decorations: DecorationInstance[];
+  fence?: Phaser.GameObjects.Image;
+  inscription?: Phaser.GameObjects.Text;
+  orderId?: string;
+  completed: boolean;
+}
+
+export class GameScene extends Phaser.Scene {
+  grid!: Grid;
+  economy!: Economy;
+  gameTime!: TimeSystem;
+  orders!: OrderSystem;
+
+  player!: Player;
+  cat!: Cat;
+
+  // Rendering layers
+  layerTerrain!: Phaser.GameObjects.Container;
+  layerDecor!: Phaser.GameObjects.Container;
+  tileSprites: Phaser.GameObjects.Image[][] = [];
+  graveVisuals: Map<string, GraveVisual> = new Map();
+
+  // Highlight for the "focused" tile in front of the player
+  focusRect!: Phaser.GameObjects.Rectangle;
+  focusedCell?: Cell;
+
+  // Input state
+  keys = { up: false, down: false, left: false, right: false };
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
+  private pendingOrdersTimer = 0;
+  private minPendingOrders = 2;
+
+  // Currently active pop-ups (drawn by UI scene). Used to freeze time.
+  uiModalOpen = false;
+
+  constructor() { super("Game"); }
+
+  create() {
+    // Game world setup
+    this.grid = new Grid();
+    this.economy = new Economy();
+    this.gameTime = new TimeSystem();
+    this.orders = new OrderSystem();
+
+    // Share state so UIScene can read/write via registry + direct refs
+    this.registry.set("economy", this.economy);
+    this.registry.set("time", this.gameTime);
+    this.registry.set("orders", this.orders);
+    this.registry.set("game", this);
+
+    this.cameras.main.setBackgroundColor(0x0b0b12);
+    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.setZoom(CONFIG.UPSCALE);
+
+    // Terrain layer
+    this.layerTerrain = this.add.container(0, 0).setDepth(-10);
+    this.layerDecor = this.add.container(0, 0).setDepth(1);
+    for (let r = 0; r < CONFIG.ROWS; r++) {
+      const row: Phaser.GameObjects.Image[] = [];
+      for (let c = 0; c < CONFIG.COLS; c++) {
+        const img = this.add.image(c * CONFIG.TILE, r * CONFIG.TILE, this.terrainKey(this.grid.cells[r][c]))
+          .setOrigin(0, 0);
+        this.layerTerrain.add(img);
+        row.push(img);
+      }
+      this.tileSprites.push(row);
+    }
+
+    // Focus highlight (moves with player)
+    this.focusRect = this.add.rectangle(0, 0, CONFIG.TILE, CONFIG.TILE, 0xf0e7c8, 0.0)
+      .setOrigin(0, 0).setStrokeStyle(1, 0xf0e7c8, 0.9).setDepth(5).setVisible(false);
+
+    // Entities
+    const spawn = this.grid.tileToWorldCenter(14, 17);
+    this.player = new Player(this, spawn.x, spawn.y);
+    const catSpawn = this.grid.tileToWorldCenter(12, 17);
+    this.cat = new Cat(this, catSpawn.x, catSpawn.y);
+
+    this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
+
+    // Input
+    this.cursors = this.input.keyboard!.createCursorKeys();
+    this.wasd = this.input.keyboard!.addKeys({
+      W: Phaser.Input.Keyboard.KeyCodes.W,
+      A: Phaser.Input.Keyboard.KeyCodes.A,
+      S: Phaser.Input.Keyboard.KeyCodes.S,
+      D: Phaser.Input.Keyboard.KeyCodes.D,
+      SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      E: Phaser.Input.Keyboard.KeyCodes.E,
+    }) as Record<string, Phaser.Input.Keyboard.Key>;
+
+    // Action key
+    (this.wasd.SPACE as Phaser.Input.Keyboard.Key).on("down", () => this.triggerAction());
+    (this.wasd.E as Phaser.Input.Keyboard.Key).on("down", () => this.triggerAction());
+
+    // Cat crystal hookup
+    this.cat.on("crystalCollected", (value: number, x: number, y: number) => {
+      this.economy.earn(value);
+      this.showFloatText(`+${value}₽ кристалл`, x, y, "#a8f0ff");
+    });
+
+    // Order events
+    this.orders.on("completed", ({ order, payout, verdict }: { order: Order; payout: number; verdict: string }) => {
+      this.economy.earn(payout);
+      const cell = this.grid.at(order.graveCol!, order.graveRow!);
+      const v = cell?.grave ? this.graveVisuals.get(graveKey(order.graveCol!, order.graveRow!)) : undefined;
+      if (v) v.completed = true;
+      const color = verdict === "perfect" ? "#b8e994" : verdict === "over" ? "#e6a94a" : verdict === "under" ? "#ffd080" : "#ff7070";
+      const msg = verdict === "perfect" ? "Идеально!" : verdict === "over" ? "Слишком пышно" : verdict === "under" ? "Скромновато" : "Просрочено";
+      this.showFloatText(`${msg} +${payout}₽`, this.player.x, this.player.y - 20, color);
+    });
+
+    this.orders.on("failed", (order: Order) => {
+      this.economy.earn(-Math.floor(order.budget * 0.2)); // reputation penalty
+      this.showFloatText(`Заказ провален! −${Math.floor(order.budget * 0.2)}₽`, this.player.x, this.player.y - 20, "#ff6868");
+    });
+
+    // End of day: path daily income, deadline check, spawn more orders.
+    this.gameTime.on("dayChanged", (day: number) => {
+      this.payDailyPathIncome();
+      this.orders.checkDeadlines(day);
+      // Ensure we keep at least N pending orders offered.
+      while (this.orders.pending.length < this.minPendingOrders) this.orders.generate(day);
+    });
+
+    // Seed starting orders.
+    this.orders.generate(this.gameTime.day);
+    this.orders.generate(this.gameTime.day);
+
+    // Resize handling
+    this.scale.on("resize", () => this.refreshZoom());
+    this.refreshZoom();
+  }
+
+  update(_t: number, deltaMs: number) {
+    const dt = deltaMs / 1000;
+    if (!this.uiModalOpen) this.gameTime.tick(deltaMs);
+
+    // Keyboard input
+    this.keys.up = this.cursors.up!.isDown || this.wasd.W.isDown;
+    this.keys.down = this.cursors.down!.isDown || this.wasd.S.isDown;
+    this.keys.left = this.cursors.left!.isDown || this.wasd.A.isDown;
+    this.keys.right = this.cursors.right!.isDown || this.wasd.D.isDown;
+
+    if (!this.uiModalOpen) {
+      this.player.update(dt, this.keys);
+      // Keep player in bounds
+      this.player.sprite.x = Phaser.Math.Clamp(this.player.sprite.x, 8, WORLD_W - 8);
+      this.player.sprite.y = Phaser.Math.Clamp(this.player.sprite.y, 10, WORLD_H - 2);
+      this.cat.update(dt, this.player.x, this.player.y);
+    }
+
+    // Focused cell = tile the player is currently standing on
+    const { col, row } = this.grid.worldToTile(this.player.x, this.player.y - 2);
+    const cell = this.grid.at(col, row);
+    this.focusedCell = cell;
+    if (cell) {
+      this.focusRect.setPosition(col * CONFIG.TILE, row * CONFIG.TILE).setVisible(true);
+    } else {
+      this.focusRect.setVisible(false);
+    }
+
+    // Depth sorting by y for nice overlap
+    this.player.sprite.setDepth(this.player.y);
+    this.cat.sprite.setDepth(this.cat.sprite.y);
+
+    // Broadcast a state tick so UI can update HUD
+    this.events.emit("state");
+    this.pendingOrdersTimer += deltaMs;
+    if (this.pendingOrdersTimer > 30000) {
+      this.pendingOrdersTimer = 0;
+      if (this.orders.pending.length < this.minPendingOrders + 1) this.orders.generate(this.gameTime.day);
+    }
+  }
+
+  // ===== Terrain / visuals =====
+
+  private terrainKey(cell: Cell): string {
+    switch (cell.terrain) {
+      case "grass": return pickGrass(cell.col, cell.row);
+      case "plot": return "tile_plot";
+      case "hole": return "tile_hole";
+      case "path": return "tile_path";
+    }
+  }
+
+  private redrawTile(col: number, row: number) {
+    const cell = this.grid.at(col, row);
+    if (!cell) return;
+    this.tileSprites[row][col].setTexture(this.terrainKey(cell));
+  }
+
+  // ===== Actions =====
+
+  /** Called by SPACE/E or the on-screen button. Opens a context menu on the UI scene for the focused cell. */
+  triggerAction() {
+    if (this.uiModalOpen || !this.focusedCell) return;
+    this.scene.get("UI").events.emit("openContext", this.focusedCell);
+  }
+
+  /** Dig a grave on a plot cell (cost applied). */
+  dig(cell: Cell): boolean {
+    if (cell.terrain !== "plot") return false;
+    if (!this.economy.spend(CONFIG.DIG_COST)) {
+      this.showFloatText("Нет денег на инструмент", this.player.x, this.player.y - 20, "#ff8080");
+      return false;
+    }
+    cell.terrain = "hole";
+    cell.grave = { decorations: [] };
+    this.redrawTile(cell.col, cell.row);
+    this.showFloatText(`Выкопано −${CONFIG.DIG_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
+    return true;
+  }
+
+  /** Place (or replace) a tombstone. Cost deducted. */
+  installTombstone(cell: Cell, item: CatalogItem): boolean {
+    if (cell.terrain !== "hole" || item.category !== "tombstone") return false;
+    if (!this.economy.spend(item.cost)) {
+      this.showFloatText("Не хватает денег", this.player.x, this.player.y - 20, "#ff8080");
+      return false;
+    }
+    const key = graveKey(cell.col, cell.row);
+    let v = this.graveVisuals.get(key);
+    if (!v) { v = { decorations: [], completed: false }; this.graveVisuals.set(key, v); }
+    if (v.tombstone) v.tombstone.destroy();
+    const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+    v.tombstone = this.add.image(x, y + 4, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 10);
+    this.layerDecor.add(v.tombstone);
+    cell.grave!.tombstoneId = item.id;
+    this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
+    return true;
+  }
+
+  addDecoration(cell: Cell, item: CatalogItem): boolean {
+    if (!cell.grave?.tombstoneId) return false;
+    if (!this.economy.spend(item.cost)) {
+      this.showFloatText("Не хватает денег", this.player.x, this.player.y - 20, "#ff8080");
+      return false;
+    }
+    const v = this.graveVisuals.get(graveKey(cell.col, cell.row))!;
+    const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+    // Scatter decor around the grave
+    const slot = v.decorations.length;
+    let dx = 0, dy = 0;
+    if (item.category === "flower") {
+      const pattern = [[-5, 4], [5, 4], [-6, -2], [6, -2], [0, 5]];
+      [dx, dy] = pattern[slot % pattern.length];
+    } else if (item.category === "lantern") {
+      const pattern = [[-7, -1], [7, -1]];
+      [dx, dy] = pattern[slot % pattern.length];
+    } else if (item.category === "statue") {
+      dx = 0; dy = -7;
+    }
+    const img = this.add.image(x + dx, y + dy, item.sprite).setOrigin(0.5, 0.9).setDepth(y + 12);
+    this.layerDecor.add(img);
+    v.decorations.push({ item, image: img });
+    cell.grave!.decorations.push(item.id);
+    this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
+    return true;
+  }
+
+  installFence(cell: Cell, item: CatalogItem): boolean {
+    if (!cell.grave?.tombstoneId || item.category !== "fence") return false;
+    if (!this.economy.spend(item.cost)) {
+      this.showFloatText("Не хватает денег", this.player.x, this.player.y - 20, "#ff8080");
+      return false;
+    }
+    const v = this.graveVisuals.get(graveKey(cell.col, cell.row))!;
+    if (v.fence) v.fence.destroy();
+    const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+    v.fence = this.add.image(x, y + 8, item.sprite).setOrigin(0.5, 1).setDepth(y + 2);
+    this.layerDecor.add(v.fence);
+    cell.grave!.fence = item.id;
+    this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
+    return true;
+  }
+
+  setInscription(cell: Cell, text: string) {
+    if (!cell.grave?.tombstoneId) return;
+    const v = this.graveVisuals.get(graveKey(cell.col, cell.row))!;
+    if (v.inscription) v.inscription.destroy();
+    const { x, y } = this.grid.tileToWorldCenter(cell.col, cell.row);
+    v.inscription = this.add.text(x, y - 4, shorten(text, 14), {
+      fontFamily: "serif", fontSize: "4px", color: "#1a1a1a", align: "center", wordWrap: { width: 14 },
+    }).setOrigin(0.5, 0.5).setResolution(4).setDepth(y + 11);
+    this.layerDecor.add(v.inscription);
+    cell.grave!.inscription = text;
+  }
+
+  buildPath(cell: Cell): boolean {
+    if (cell.terrain !== "grass") return false;
+    if (!this.economy.spend(CONFIG.PATH_COST)) {
+      this.showFloatText("Не хватает на дорожку", this.player.x, this.player.y - 20, "#ff8080");
+      return false;
+    }
+    cell.terrain = "path";
+    this.redrawTile(cell.col, cell.row);
+    this.showFloatText(`Дорожка −${CONFIG.PATH_COST}₽`, this.player.x, this.player.y - 20, "#e6a94a");
+    return true;
+  }
+
+  removePath(cell: Cell): boolean {
+    if (cell.terrain !== "path") return false;
+    cell.terrain = "grass";
+    this.redrawTile(cell.col, cell.row);
+    return true;
+  }
+
+  /** Compute luxury for a grave based on installed items. */
+  graveLuxury(cell: Cell): number {
+    if (!cell.grave?.tombstoneId) return 0;
+    let total = 0;
+    const tomb = itemById(cell.grave.tombstoneId);
+    if (tomb) total += tomb.luxury;
+    for (const id of cell.grave.decorations) {
+      const it = itemById(id);
+      if (it) total += it.luxury;
+    }
+    if (cell.grave.fence) {
+      const it = itemById(cell.grave.fence);
+      if (it) total += it.luxury;
+    }
+    if (cell.grave.inscription) total += 4;
+    return total;
+  }
+
+  /** Count adjacent path tiles (4-neighbourhood). */
+  adjacentPathTiles(cell: Cell): number {
+    let n = 0;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const c = this.grid.at(cell.col + dc, cell.row + dr);
+      if (c?.terrain === "path") n++;
+    }
+    return n;
+  }
+
+  /** Complete an order on the given cell. */
+  completeOrder(cell: Cell, order: Order) {
+    if (!cell.grave?.tombstoneId) return;
+    if (!cell.grave.inscription) return;
+    const lux = this.graveLuxury(cell);
+    const pathBonus = this.adjacentPathTiles(cell);
+    order.graveCol = cell.col;
+    order.graveRow = cell.row;
+    cell.grave.orderId = order.id;
+    cell.grave.completed = true;
+    const v = this.graveVisuals.get(graveKey(cell.col, cell.row));
+    if (v) { v.orderId = order.id; v.completed = true; }
+    this.orders.complete(order, lux, pathBonus, this.gameTime.day);
+  }
+
+  /** Per-day income from paths. */
+  private payDailyPathIncome() {
+    let paths = 0;
+    for (let r = 0; r < CONFIG.ROWS; r++) {
+      for (let c = 0; c < CONFIG.COLS; c++) {
+        if (this.grid.cells[r][c].terrain === "path") paths++;
+      }
+    }
+    if (paths > 0) {
+      const gain = paths * CONFIG.PATH_INCOME_PER_DAY;
+      this.economy.earn(gain);
+      this.showFloatText(`Доход от дорожек +${gain}₽`, this.player.x, this.player.y - 20, "#a8e3a8");
+    }
+  }
+
+  private showFloatText(text: string, x: number, y: number, color: string) {
+    const t = this.add.text(x, y, text, {
+      fontFamily: "serif", fontSize: "6px", color, stroke: "#000", strokeThickness: 1,
+    }).setOrigin(0.5, 1).setDepth(1000).setResolution(4);
+    this.tweens.add({
+      targets: t, y: y - 16, alpha: 0, duration: 1200, ease: "Sine.Out",
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  private refreshZoom() {
+    // Fit the cemetery into the viewport if it would overflow; otherwise use UPSCALE.
+    const vw = this.scale.width;
+    const vh = this.scale.height;
+    const maxZoomX = vw / WORLD_W;
+    const maxZoomY = vh / WORLD_H;
+    const fitZoom = Math.min(maxZoomX, maxZoomY);
+    const zoom = Math.max(1, Math.min(CONFIG.UPSCALE, fitZoom * 1.8));
+    this.cameras.main.setZoom(zoom);
+  }
+}
+
+function pickGrass(col: number, row: number): string {
+  const h = (col * 73856093) ^ (row * 19349663);
+  const m = Math.abs(h) % 3;
+  return `tile_grass_${m}`;
+}
+
+export function graveKey(col: number, row: number): string {
+  return `${col},${row}`;
+}
+
+function shorten(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
+}
