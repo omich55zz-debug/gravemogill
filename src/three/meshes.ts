@@ -567,38 +567,132 @@ export function decorBible(): THREE.Group {
 
 // ---------------- Entities ----------------
 
+/**
+ * Ancient Elf Mage — dark robe, hood, silver hair, staff with glowing orb.
+ * Designed to read well from a top-down camera angle.
+ */
 export function entityPlayer(): THREE.Group {
   const g = new THREE.Group();
-  // Boots
-  const bootsGeo = new THREE.BoxGeometry(0.18, 0.12, 0.2);
-  const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a0f08, roughness: 0.8 });
+  // Boots (leather)
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.85 });
+  const bootsGeo = new THREE.BoxGeometry(0.16, 0.1, 0.2);
   const bL = mkMesh(bootsGeo, bootMat);
-  bL.position.set(-0.1, 0.06, 0);
+  bL.position.set(-0.11, 0.05, 0);
   g.add(bL);
   const bR = mkMesh(bootsGeo, bootMat);
-  bR.position.set(0.1, 0.06, 0);
+  bR.position.set(0.11, 0.05, 0);
   g.add(bR);
-  // Coat (dark, tall)
-  const coatGeo = new THREE.BoxGeometry(0.5, 0.7, 0.3);
-  const coatMat = new THREE.MeshStandardMaterial({ color: 0x1a1624, roughness: 0.7 });
-  const coat = mkMesh(coatGeo, coatMat);
-  coat.position.y = 0.55;
-  g.add(coat);
-  // Shirt collar
-  const collar = mkMesh(new THREE.BoxGeometry(0.3, 0.1, 0.25), new THREE.MeshStandardMaterial({ color: 0xe8e1cf }));
-  collar.position.y = 0.92;
-  g.add(collar);
-  // Head
-  const head = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe8c9a8, roughness: 0.8 }));
-  head.position.y = 1.12;
+
+  // Long flowing robe — deep purple-black with subtle sheen.
+  const robeMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1230,
+    roughness: 0.55,
+    metalness: 0.15,
+  });
+  const robeLower = mkMesh(new THREE.CylinderGeometry(0.32, 0.42, 0.75, 10), robeMat);
+  robeLower.position.y = 0.48;
+  g.add(robeLower);
+  const robeUpper = mkMesh(new THREE.CylinderGeometry(0.26, 0.32, 0.3, 10), robeMat);
+  robeUpper.position.y = 0.98;
+  g.add(robeUpper);
+
+  // Belt with glowing gem buckle
+  const beltMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.9 });
+  const belt = mkMesh(new THREE.CylinderGeometry(0.345, 0.345, 0.07, 12), beltMat);
+  belt.position.y = 0.75;
+  g.add(belt);
+  const buckle = mkMesh(
+    new THREE.IcosahedronGeometry(0.06, 0),
+    new THREE.MeshStandardMaterial({
+      color: 0xc04020, emissive: 0x602010, emissiveIntensity: 1.2, roughness: 0.3,
+    })
+  );
+  buckle.position.set(0, 0.75, 0.34);
+  g.add(buckle);
+
+  // Shoulder mantle / pauldrons — darker fabric flared at shoulders.
+  const mantleMat = new THREE.MeshStandardMaterial({ color: 0x0c0818, roughness: 0.8 });
+  const mantle = mkMesh(new THREE.CylinderGeometry(0.38, 0.26, 0.2, 12, 1, true), mantleMat);
+  mantle.position.y = 1.06;
+  g.add(mantle);
+
+  // Gold trim at hem
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0x8c6a2a, roughness: 0.4, metalness: 0.6 });
+  const hem = mkMesh(new THREE.TorusGeometry(0.42, 0.018, 5, 20), goldMat);
+  hem.rotation.x = Math.PI / 2;
+  hem.position.y = 0.13;
+  g.add(hem);
+
+  // Head (pale elf skin)
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.7 });
+  const head = mkMesh(new THREE.SphereGeometry(0.17, 12, 10), skinMat);
+  head.position.y = 1.28;
   g.add(head);
-  // Top hat
-  const hatBrim = mkMesh(new THREE.CylinderGeometry(0.24, 0.24, 0.03, 12), new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.6 }));
-  hatBrim.position.y = 1.27;
-  g.add(hatBrim);
-  const hatCrown = mkMesh(new THREE.CylinderGeometry(0.18, 0.18, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.6 }));
-  hatCrown.position.y = 1.43;
-  g.add(hatCrown);
+
+  // Pointy elf ears
+  const earGeo = new THREE.ConeGeometry(0.05, 0.16, 5);
+  const earL = mkMesh(earGeo, skinMat);
+  earL.position.set(-0.17, 1.32, -0.02);
+  earL.rotation.z = Math.PI / 2 - 0.25;
+  g.add(earL);
+  const earR = mkMesh(earGeo, skinMat);
+  earR.position.set(0.17, 1.32, -0.02);
+  earR.rotation.z = -Math.PI / 2 + 0.25;
+  g.add(earR);
+
+  // Long silver hair falling behind the shoulders
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0xd8d8e4, roughness: 0.5 });
+  const hairBack = mkMesh(new THREE.BoxGeometry(0.36, 0.42, 0.08), hairMat);
+  hairBack.position.set(0, 1.18, -0.18);
+  g.add(hairBack);
+  const hairTop = mkMesh(new THREE.SphereGeometry(0.19, 10, 8), hairMat);
+  hairTop.position.y = 1.36;
+  hairTop.scale.set(1, 0.6, 1);
+  g.add(hairTop);
+
+  // Pointed hood (hangs back over the shoulders)
+  const hoodMat = new THREE.MeshStandardMaterial({ color: 0x0c0818, roughness: 0.85 });
+  const hood = mkMesh(new THREE.ConeGeometry(0.22, 0.55, 8), hoodMat);
+  hood.position.set(0, 1.18, -0.22);
+  hood.rotation.x = -0.25;
+  g.add(hood);
+
+  // ------- Staff held to the right -------
+  const staffMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x3a2712, roughness: 0.9 });
+  const staff = mkMesh(new THREE.CylinderGeometry(0.025, 0.03, 1.7, 6), staffMat);
+  staff.position.set(0.34, 0.85, 0.12);
+  staff.rotation.z = -0.08;
+  g.add(staff);
+  // Staff clawed top (three prongs holding the orb)
+  const prongMat = new THREE.MeshStandardMaterial({ color: 0x2a1f10, roughness: 0.75 });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const prong = mkMesh(new THREE.CylinderGeometry(0.015, 0.008, 0.18, 4), prongMat);
+    prong.position.set(0.34 + Math.cos(a) * 0.04, 1.78, 0.12 + Math.sin(a) * 0.04);
+    prong.rotation.z = Math.cos(a) * 0.4;
+    prong.rotation.x = Math.sin(a) * 0.4;
+    g.add(prong);
+  }
+  // Glowing orb
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: 0x6fc8ff,
+    emissive: 0x3a9cff,
+    emissiveIntensity: 2.2,
+    roughness: 0.15,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const orb = mkMesh(new THREE.SphereGeometry(0.1, 14, 10), orbMat);
+  orb.position.set(0.34, 1.82, 0.12);
+  g.add(orb);
+  // Orb halo sprite
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: 0x6fc8ff, transparent: true, opacity: 0.35, depthWrite: false,
+  });
+  const halo = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), haloMat);
+  halo.position.copy(orb.position);
+  g.add(halo);
+
   return g;
 }
 

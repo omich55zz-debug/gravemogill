@@ -52,12 +52,12 @@ export class ThreeWorld {
   orbitDistance = 18;
   orbitAngleH = Math.PI / 4; // yaw
   orbitAngleV = Math.PI / 3.5; // pitch
-  minDistance = 8;
-  maxDistance = 42;
+  minDistance = 5;
+  maxDistance = 55;
 
   // First-person camera state.
   /** If true, camera is at player head height and orbits via yaw/pitch look. */
-  firstPerson = true;
+  firstPerson = false;
   /** Yaw (around Y) of player's look/body — exposed so GameScene can use it for movement vector. */
   lookYaw = 0;
   /** Pitch (around X) of head — clamped. */
@@ -72,7 +72,9 @@ export class ThreeWorld {
     this.scene = new THREE.Scene();
     // Dark gothic night — night sky panorama, very dense low-visibility fog.
     this.scene.background = nightSkyTexture();
-    this.scene.fog = new THREE.Fog(0x0a0f18, 10, 34);
+    // Top-down camera sits ~16 units away; push fog far enough that the
+    // whole cemetery block is visible but still atmospheric.
+    this.scene.fog = new THREE.Fog(0x0a0f18, 22, 70);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -89,7 +91,7 @@ export class ThreeWorld {
     this.canvas.style.imageRendering = "auto";
     parent.appendChild(this.canvas);
 
-    this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.05, 200);
+    this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
 
     // Lighting — dark gothic:
     //  • ambient kept low so scene is legible but moody
@@ -410,10 +412,13 @@ export class ThreeWorld {
   /** Main lantern held by the player — warm flickering point light. */
   private playerLantern?: THREE.PointLight;
 
-  /** Create a lantern light that follows the player for first-person immersion. */
+  /**
+   * Create a magical blue point light at the tip of the elf mage's staff orb.
+   * The light follows the player and flickers subtly to simulate arcane energy.
+   */
   ensurePlayerLantern(): THREE.PointLight {
     if (this.playerLantern) return this.playerLantern;
-    const l = new THREE.PointLight(0xffa346, 3.5, 9.5, 1.4);
+    const l = new THREE.PointLight(0x6fc8ff, 3.0, 9.0, 1.6);
     l.castShadow = true;
     l.shadow.mapSize.set(512, 512);
     l.shadow.camera.near = 0.05;
@@ -424,22 +429,29 @@ export class ThreeWorld {
     return l;
   }
 
-  /** Update lantern position + flicker. Call once per frame after eye is set. */
+  /** Update lantern/staff-orb position + flicker. Call once per frame. */
   updatePlayerLantern(t: number) {
     const l = this.playerLantern;
     if (!l) return;
-    const cosY = Math.cos(this.lookYaw);
-    const sinY = Math.sin(this.lookYaw);
-    // Lantern held slightly forward, below eye, to right side.
+    // In top-down mode, we use the stored 'eye' x/z as the player position
+    // (updated via setOrbitTarget). The orb hovers ~1.8 above, offset to the
+    // right of facing direction.
+    const yaw = this.firstPerson ? this.lookYaw : this.playerYaw;
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
     l.position.set(
-      this.eye.x + sinY * 0.3 + cosY * 0.35,
-      1.15,
-      this.eye.z + cosY * 0.3 - sinY * 0.35
+      this.eye.x + cosY * 0.34,
+      1.82,
+      this.eye.z - sinY * 0.34
     );
-    // Flicker: base + small noise.
-    const flick = 0.85 + Math.sin(t * 0.009) * 0.08 + Math.sin(t * 0.027) * 0.06 + (Math.random() - 0.5) * 0.05;
-    l.intensity = 3.5 * flick;
+    // Arcane flicker (slower / gentler than a lantern).
+    const flick = 0.9 + Math.sin(t * 0.004) * 0.06 + Math.sin(t * 0.013) * 0.04 + (Math.random() - 0.5) * 0.03;
+    l.intensity = 3.0 * flick;
   }
+
+  /** Player body yaw so staff orb tracks correctly in top-down mode. */
+  playerYaw = 0;
+  setPlayerYaw(yaw: number) { this.playerYaw = yaw; }
 
   /** Update every registered torch's flicker. */
   updateTorches(t: number) {
