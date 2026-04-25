@@ -610,12 +610,45 @@ export function fenceStone(): THREE.Group {
 
 export function decorBouquet(color: number): THREE.Group {
   const g = new THREE.Group();
-  for (let i = 0; i < 3; i++) {
-    const p = mkMesh(new THREE.SphereGeometry(0.08, 6, 5), flowerMat(color));
-    p.position.set((i - 1) * 0.08, 0.14, Math.sin(i) * 0.03);
-    g.add(p);
+  // Wrapping paper cone around the stems
+  const wrapMat = new THREE.MeshStandardMaterial({ color: 0x6a5c3a, roughness: 0.95 });
+  const wrap = mkMesh(new THREE.ConeGeometry(0.13, 0.18, 8, 1, true), wrapMat);
+  wrap.position.y = 0.08;
+  wrap.rotation.x = Math.PI;
+  g.add(wrap);
+  // 6 flower heads instead of 3 flat spheres, with petals pointing outward
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const r = 0.06 + Math.random() * 0.02;
+    const head = mkMesh(new THREE.IcosahedronGeometry(0.06, 0), flowerMat(color));
+    head.position.set(Math.cos(a) * r, 0.2 + Math.random() * 0.03, Math.sin(a) * r);
+    g.add(head);
+    // Gold center
+    const core = mkMesh(
+      new THREE.SphereGeometry(0.02, 5, 4),
+      new THREE.MeshStandardMaterial({ color: 0xffcc44, emissive: 0x886600, emissiveIntensity: 0.6 })
+    );
+    core.position.copy(head.position);
+    g.add(core);
   }
-  const stems = mkMesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15, 5), new THREE.MeshStandardMaterial({ color: 0x2a3a1a, roughness: 0.9 }));
+  // Central tall flower
+  const center = mkMesh(new THREE.IcosahedronGeometry(0.08, 0), flowerMat(color));
+  center.position.set(0, 0.24, 0);
+  g.add(center);
+  // A couple of leaves
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2a3a1a, roughness: 0.9, side: THREE.DoubleSide });
+  for (const ang of [0.6, -0.6]) {
+    const leaf = mkMesh(new THREE.PlaneGeometry(0.12, 0.06), leafMat);
+    leaf.position.set(Math.cos(ang) * 0.08, 0.14, Math.sin(ang) * 0.08);
+    leaf.rotation.y = ang;
+    leaf.rotation.x = -0.3;
+    g.add(leaf);
+  }
+  // Stems
+  const stems = mkMesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.15, 5),
+    new THREE.MeshStandardMaterial({ color: 0x2a3a1a, roughness: 0.9 })
+  );
   stems.position.y = 0.08;
   g.add(stems);
   return g;
@@ -623,47 +656,139 @@ export function decorBouquet(color: number): THREE.Group {
 
 export function decorCandle(): THREE.Group {
   const g = new THREE.Group();
-  const holder = mkMesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8), brass);
-  holder.position.y = 0.06;
+  // Ornate brass holder with a base plate
+  const plate = mkMesh(new THREE.CylinderGeometry(0.12, 0.13, 0.03, 12), brass);
+  plate.position.y = 0.015;
+  g.add(plate);
+  const holder = mkMesh(new THREE.CylinderGeometry(0.07, 0.09, 0.12, 12), brass);
+  holder.position.y = 0.08;
   g.add(holder);
-  const wax = mkMesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 8), new THREE.MeshStandardMaterial({ color: 0xe8d8a8, roughness: 0.4 }));
-  wax.position.y = 0.22;
+  // Decorative ring around holder
+  const ring = mkMesh(new THREE.TorusGeometry(0.075, 0.012, 4, 12), brass);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.14;
+  g.add(ring);
+  // Wax — slightly tapered with a warm cream color
+  const waxMat = new THREE.MeshStandardMaterial({ color: 0xe8d8a8, roughness: 0.4 });
+  const wax = mkMesh(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 10), waxMat);
+  wax.position.y = 0.25;
   g.add(wax);
-  const flame = mkMesh(new THREE.SphereGeometry(0.035, 5, 4), new THREE.MeshStandardMaterial({ color: 0xffaa33, emissive: 0xff8800, emissiveIntensity: 1.5 }));
-  flame.position.y = 0.38;
+  // Wax drips (sphere dribbles)
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const drip = mkMesh(new THREE.SphereGeometry(0.02, 5, 4), waxMat);
+    drip.position.set(Math.cos(a) * 0.046, 0.18 + Math.random() * 0.04, Math.sin(a) * 0.046);
+    drip.scale.y = 1.8;
+    g.add(drip);
+  }
+  // Wick (dark stub)
+  const wick = mkMesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 0.03, 4),
+    new THREE.MeshStandardMaterial({ color: 0x1a1408, roughness: 0.9 })
+  );
+  wick.position.y = 0.37;
+  g.add(wick);
+  // Flame
+  const flame = mkMesh(
+    new THREE.SphereGeometry(0.035, 6, 5),
+    new THREE.MeshStandardMaterial({ color: 0xffaa33, emissive: 0xff8800, emissiveIntensity: 1.8 })
+  );
+  flame.position.y = 0.4;
   flame.scale.y = 1.6;
   g.add(flame);
   // Point light glow
-  const pl = new THREE.PointLight(0xffa040, 0.4, 1.8, 2);
-  pl.position.y = 0.38;
+  const pl = new THREE.PointLight(0xffa040, 0.5, 2.2, 2);
+  pl.position.y = 0.4;
   g.add(pl);
   return g;
 }
 
 export function decorWreath(): THREE.Group {
   const g = new THREE.Group();
-  const ring = mkMesh(new THREE.TorusGeometry(0.22, 0.06, 6, 20), mossGreen);
+  // Dark evergreen base
+  const ring = mkMesh(new THREE.TorusGeometry(0.22, 0.06, 8, 24), mossGreen);
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.18;
   g.add(ring);
-  // Ribbon
-  const ribbon = mkMesh(new THREE.BoxGeometry(0.05, 0.2, 0.02), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 }));
-  ribbon.position.set(0, 0.05, 0.22);
+  // A second inner ring for depth
+  const inner = mkMesh(
+    new THREE.TorusGeometry(0.2, 0.035, 6, 20),
+    new THREE.MeshStandardMaterial({ color: 0x1a3020, roughness: 0.95 })
+  );
+  inner.rotation.x = Math.PI / 2;
+  inner.position.y = 0.22;
+  g.add(inner);
+  // Scattered red berry accents
+  const berryMat = new THREE.MeshStandardMaterial({ color: 0x8c1a1a, roughness: 0.6, emissive: 0x3a0808, emissiveIntensity: 0.3 });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.3;
+    const b = mkMesh(new THREE.SphereGeometry(0.025, 6, 5), berryMat);
+    b.position.set(Math.cos(a) * 0.22, 0.2, Math.sin(a) * 0.22);
+    g.add(b);
+  }
+  // Couple of flower accents
+  const fMat = flowerMat(0xc87cc8);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const fl = mkMesh(new THREE.IcosahedronGeometry(0.035, 0), fMat);
+    fl.position.set(Math.cos(a) * 0.22, 0.22, Math.sin(a) * 0.22);
+    g.add(fl);
+  }
+  // Dark ribbon at the bottom
+  const ribbonMat = new THREE.MeshStandardMaterial({ color: 0x2a1030, roughness: 0.5 });
+  const ribbon = mkMesh(new THREE.BoxGeometry(0.07, 0.22, 0.015), ribbonMat);
+  ribbon.position.set(0, 0.06, 0.22);
   g.add(ribbon);
+  // Ribbon tips splayed
+  for (const sign of [-1, 1]) {
+    const tip = mkMesh(new THREE.BoxGeometry(0.05, 0.1, 0.01), ribbonMat);
+    tip.position.set(sign * 0.045, 0.02, 0.24);
+    tip.rotation.z = sign * 0.5;
+    g.add(tip);
+  }
   return g;
 }
 
 export function decorBible(): THREE.Group {
   const g = new THREE.Group();
-  const book = mkMesh(new THREE.BoxGeometry(0.35, 0.08, 0.25), new THREE.MeshStandardMaterial({ color: 0x401a14, roughness: 0.6 }));
+  // Leather cover (uses woodTexture for subtle grain)
+  const coverMat = new THREE.MeshStandardMaterial({
+    map: woodTexture(),
+    color: 0x401a14,
+    roughness: 0.7,
+  });
+  const book = mkMesh(new THREE.BoxGeometry(0.35, 0.08, 0.25), coverMat);
   book.position.y = 0.04;
   g.add(book);
-  const crossV = mkMesh(new THREE.BoxGeometry(0.03, 0.14, 0.01), brass);
-  crossV.position.set(0, 0.09, 0);
+  // Gold page edge visible along sides
+  const pageMat = new THREE.MeshStandardMaterial({ color: 0xe8d07a, roughness: 0.5 });
+  const pages = mkMesh(new THREE.BoxGeometry(0.34, 0.05, 0.245), pageMat);
+  pages.position.y = 0.045;
+  g.add(pages);
+  // Cover on top of pages
+  const topCover = mkMesh(new THREE.BoxGeometry(0.36, 0.015, 0.255), coverMat);
+  topCover.position.y = 0.075;
+  g.add(topCover);
+  // Cross embossed on cover
+  const crossV = mkMesh(new THREE.BoxGeometry(0.025, 0.015, 0.14), brass);
+  crossV.position.set(0, 0.084, 0);
   g.add(crossV);
-  const crossH = mkMesh(new THREE.BoxGeometry(0.09, 0.03, 0.01), brass);
-  crossH.position.set(0, 0.1, 0);
+  const crossH = mkMesh(new THREE.BoxGeometry(0.09, 0.015, 0.025), brass);
+  crossH.position.set(0, 0.084, 0);
   g.add(crossH);
+  // Brass corner studs
+  const studMat = brass;
+  for (const sx of [-0.14, 0.14]) {
+    for (const sz of [-0.09, 0.09]) {
+      const stud = mkMesh(new THREE.SphereGeometry(0.015, 5, 4), studMat);
+      stud.position.set(sx, 0.086, sz);
+      g.add(stud);
+    }
+  }
+  // Front clasp
+  const clasp = mkMesh(new THREE.BoxGeometry(0.04, 0.02, 0.08), studMat);
+  clasp.position.set(0.175, 0.05, 0);
+  g.add(clasp);
   return g;
 }
 
@@ -798,46 +923,139 @@ export function entityPlayer(): THREE.Group {
   return g;
 }
 
+/**
+ * Gray tabby cat companion — fluffy body, pointy ears, stripe tail, green eyes.
+ */
 export function entityCat(): THREE.Group {
   const g = new THREE.Group();
-  const catMat = new THREE.MeshStandardMaterial({ color: 0x141014, roughness: 0.9 });
-  // Body
-  const body = mkMesh(new THREE.BoxGeometry(0.5, 0.18, 0.22), catMat);
-  body.position.y = 0.2;
+  // Soft gray fur with a warm undertone.
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x7a7d82, roughness: 0.9 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: 0xbbb9b4, roughness: 0.95 });
+  const darkStripeMat = new THREE.MeshStandardMaterial({ color: 0x4a4c52, roughness: 0.95 });
+
+  // Body — ellipsoid-ish
+  const body = mkMesh(new THREE.SphereGeometry(0.22, 14, 10), furMat);
+  body.scale.set(1.9, 0.7, 0.85);
+  body.position.set(0, 0.22, 0);
   g.add(body);
-  // Head
-  const head = mkMesh(new THREE.SphereGeometry(0.13, 8, 7), catMat);
-  head.position.set(0.22, 0.3, 0);
-  g.add(head);
-  // Ears
-  const earGeo = new THREE.ConeGeometry(0.05, 0.09, 4);
-  const earL = mkMesh(earGeo, catMat);
-  earL.position.set(0.22, 0.43, -0.07);
-  g.add(earL);
-  const earR = mkMesh(earGeo, catMat);
-  earR.position.set(0.22, 0.43, 0.07);
-  g.add(earR);
-  // Eyes (tiny green)
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x88ff44, emissive: 0x44aa22, emissiveIntensity: 0.8 });
-  const eyeGeo = new THREE.SphereGeometry(0.025, 6, 5);
-  const eyeL = mkMesh(eyeGeo, eyeMat);
-  eyeL.position.set(0.32, 0.33, -0.05);
-  g.add(eyeL);
-  const eyeR = mkMesh(eyeGeo, eyeMat);
-  eyeR.position.set(0.32, 0.33, 0.05);
-  g.add(eyeR);
-  // Tail
-  const tail = mkMesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 5), catMat);
-  tail.position.set(-0.25, 0.25, 0);
-  tail.rotation.z = 0.6;
-  g.add(tail);
-  // Legs
-  const legGeo = new THREE.BoxGeometry(0.07, 0.15, 0.07);
-  for (const [x, z] of [[-0.15, -0.08], [0.15, -0.08], [-0.15, 0.08], [0.15, 0.08]]) {
-    const leg = mkMesh(legGeo, catMat);
-    leg.position.set(x, 0.075, z);
-    g.add(leg);
+  // Belly (lighter under)
+  const belly = mkMesh(new THREE.SphereGeometry(0.19, 12, 8), bellyMat);
+  belly.scale.set(1.7, 0.4, 0.7);
+  belly.position.set(0, 0.17, 0);
+  g.add(belly);
+
+  // A couple of tabby stripes across the back
+  for (let i = 0; i < 3; i++) {
+    const s = mkMesh(new THREE.TorusGeometry(0.22, 0.015, 4, 10, Math.PI), darkStripeMat);
+    s.rotation.x = -Math.PI / 2;
+    s.rotation.z = Math.PI / 2;
+    s.position.set(-0.15 + i * 0.15, 0.32, 0);
+    s.scale.set(0.85, 0.85, 0.55);
+    g.add(s);
   }
+
+  // Chest tuft
+  const chest = mkMesh(new THREE.SphereGeometry(0.1, 10, 8), bellyMat);
+  chest.position.set(0.32, 0.2, 0);
+  g.add(chest);
+
+  // Head
+  const head = mkMesh(new THREE.SphereGeometry(0.15, 14, 10), furMat);
+  head.position.set(0.38, 0.32, 0);
+  g.add(head);
+
+  // Muzzle (lighter)
+  const muzzle = mkMesh(new THREE.SphereGeometry(0.075, 8, 6), bellyMat);
+  muzzle.position.set(0.48, 0.28, 0);
+  muzzle.scale.set(1.2, 0.8, 1);
+  g.add(muzzle);
+  // Tiny pink nose
+  const nose = mkMesh(
+    new THREE.SphereGeometry(0.016, 6, 5),
+    new THREE.MeshStandardMaterial({ color: 0xe28484, roughness: 0.6 })
+  );
+  nose.position.set(0.535, 0.3, 0);
+  g.add(nose);
+
+  // Ears — triangle cones with inner pink
+  const earGeo = new THREE.ConeGeometry(0.07, 0.13, 4);
+  const earInnerMat = new THREE.MeshStandardMaterial({ color: 0xde8a94, roughness: 0.8 });
+  for (const sign of [-1, 1]) {
+    const ear = mkMesh(earGeo, furMat);
+    ear.position.set(0.33, 0.47, sign * 0.1);
+    ear.rotation.x = sign * 0.15;
+    ear.rotation.z = 0.15;
+    g.add(ear);
+    const inner = mkMesh(new THREE.ConeGeometry(0.042, 0.09, 4), earInnerMat);
+    inner.position.set(0.34, 0.46, sign * 0.1);
+    inner.rotation.x = sign * 0.15;
+    inner.rotation.z = 0.15;
+    g.add(inner);
+  }
+
+  // Green almond eyes
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0x8ef560, emissive: 0x3c8a22, emissiveIntensity: 0.9, roughness: 0.25,
+  });
+  const eyeGeo = new THREE.SphereGeometry(0.026, 8, 6);
+  for (const sign of [-1, 1]) {
+    const eye = mkMesh(eyeGeo, eyeMat);
+    eye.position.set(0.48, 0.36, sign * 0.06);
+    eye.scale.set(1.2, 1.4, 0.7);
+    g.add(eye);
+    // Vertical slit pupil
+    const pupil = mkMesh(
+      new THREE.SphereGeometry(0.012, 6, 4),
+      new THREE.MeshBasicMaterial({ color: 0x000000 })
+    );
+    pupil.position.set(0.498, 0.36, sign * 0.06);
+    pupil.scale.set(0.4, 1.8, 1);
+    g.add(pupil);
+  }
+
+  // Whiskers (thin planes)
+  const whiskerMat = new THREE.MeshStandardMaterial({ color: 0xecece8, roughness: 0.8 });
+  for (let i = -1; i <= 1; i++) {
+    for (const sign of [-1, 1]) {
+      const wh = mkMesh(new THREE.BoxGeometry(0.18, 0.006, 0.006), whiskerMat);
+      wh.position.set(0.52, 0.29 + i * 0.015, sign * 0.04);
+      wh.rotation.y = sign * 0.2 + i * 0.05;
+      g.add(wh);
+    }
+  }
+
+  // Tail (longer, curled up)
+  const tailSegMat = furMat;
+  for (let i = 0; i < 6; i++) {
+    const t = i / 6;
+    const seg = mkMesh(new THREE.SphereGeometry(0.06 - t * 0.015, 8, 6), tailSegMat);
+    seg.position.set(-0.3 - t * 0.08, 0.28 + Math.sin(t * 2.5) * 0.15 + 0.05 * t, 0);
+    g.add(seg);
+    // Occasional dark stripe on tail
+    if (i === 1 || i === 3 || i === 5) {
+      const stripe = mkMesh(
+        new THREE.TorusGeometry(0.06 - t * 0.015, 0.01, 4, 8),
+        darkStripeMat
+      );
+      stripe.rotation.y = Math.PI / 2;
+      stripe.position.copy(seg.position);
+      g.add(stripe);
+    }
+  }
+
+  // Legs
+  const legGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.18, 6);
+  for (const [x, z] of [[-0.18, -0.1], [0.18, -0.1], [-0.18, 0.1], [0.18, 0.1]]) {
+    const leg = mkMesh(legGeo, furMat);
+    leg.position.set(x, 0.09, z);
+    g.add(leg);
+    // Paw bottom
+    const paw = mkMesh(new THREE.SphereGeometry(0.04, 6, 5), bellyMat);
+    paw.position.set(x, 0.015, z);
+    paw.scale.set(1.2, 0.5, 1);
+    g.add(paw);
+  }
+
   return g;
 }
 

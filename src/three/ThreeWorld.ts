@@ -337,10 +337,126 @@ export class ThreeWorld {
       if (m.mesh.position.x < -cols * 0.6) m.mesh.position.x = cols * 0.6;
       if (m.mesh.position.z > rows * 0.6) m.mesh.position.z = -rows * 0.6;
       if (m.mesh.position.z < -rows * 0.6) m.mesh.position.z = rows * 0.6;
-      // Pulse opacity slowly for a breathing feel.
+      // Pulse opacity slowly for a breathing feel. Stronger for "fog" weather.
       const mat = m.mesh.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.28 + 0.18 * (0.5 + 0.5 * Math.sin(t * 0.0004 + m.phase));
+      const base = this.weather === "fog" ? 0.55 : 0.24;
+      const amp = this.weather === "fog" ? 0.3 : 0.14;
+      mat.opacity = base + amp * (0.5 + 0.5 * Math.sin(t * 0.0004 + m.phase));
     }
+  }
+
+  // ---------------- Weather ----------------
+  weather: "clear" | "rain" | "fog" | "overcast" = "clear";
+  private rainPoints?: THREE.Points;
+  private rainVel: Float32Array = new Float32Array(0);
+  private rainCount = 800;
+
+  setWeather(kind: "clear" | "rain" | "fog" | "overcast") {
+    if (this.weather === kind) return;
+    this.weather = kind;
+    // Fog density + color change per weather.
+    if (!this.scene.fog || !(this.scene.fog instanceof THREE.Fog)) {
+      this.scene.fog = new THREE.Fog(0x0a0f18, 22, 70);
+    }
+    const fog = this.scene.fog as THREE.Fog;
+    switch (kind) {
+      case "clear":
+        fog.color.setHex(0x0a1028);
+        fog.near = 45; fog.far = 110;
+        this.setCloudColor(0x0a1028);
+        this.setSunMoonIntensity(1.1, 0.45);
+        break;
+      case "overcast":
+        fog.color.setHex(0x1a1e26);
+        fog.near = 28; fog.far = 70;
+        this.setCloudColor(0x1a1e26);
+        this.setSunMoonIntensity(0.55, 0.3);
+        break;
+      case "rain":
+        fog.color.setHex(0x141820);
+        fog.near = 18; fog.far = 55;
+        this.setCloudColor(0x141820);
+        this.setSunMoonIntensity(0.5, 0.25);
+        break;
+      case "fog":
+        fog.color.setHex(0x2a3040);
+        fog.near = 8; fog.far = 32;
+        this.setCloudColor(0x2a3040);
+        this.setSunMoonIntensity(0.6, 0.3);
+        break;
+    }
+    this.toggleRain(kind === "rain");
+  }
+
+  private setCloudColor(color: number) {
+    // Tint the scene background uniformly so sky feels consistent with fog.
+    if (this.scene.background instanceof THREE.Color) {
+      (this.scene.background as THREE.Color).setHex(color);
+    }
+    // If background is a texture (nightSkyTexture), layer fog by adjusting
+    // ambient hemisphere tint so distant elements blend.
+    (this.ambient.color as THREE.Color).setHex(color);
+  }
+
+  private setSunMoonIntensity(sunI: number, ambI: number) {
+    this.sun.intensity = sunI;
+    this.ambient.intensity = ambI;
+  }
+
+  private toggleRain(on: boolean) {
+    if (on) {
+      if (this.rainPoints) { this.rainPoints.visible = true; return; }
+      this.buildRain();
+    } else if (this.rainPoints) {
+      this.rainPoints.visible = false;
+    }
+  }
+
+  private buildRain() {
+    const cols = CONFIG.COLS;
+    const rows = CONFIG.ROWS;
+    const n = this.rainCount;
+    const positions = new Float32Array(n * 3);
+    this.rainVel = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      positions[i * 3 + 0] = (Math.random() - 0.5) * cols * 1.6;
+      positions[i * 3 + 1] = Math.random() * 18 + 2;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * rows * 1.6;
+      this.rainVel[i] = 12 + Math.random() * 8;
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xbccfe0,
+      size: 0.09,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.rainPoints = new THREE.Points(geom, mat);
+    this.scene.add(this.rainPoints);
+  }
+
+  private updateRain(dt: number) {
+    if (!this.rainPoints || !this.rainPoints.visible) return;
+    const cols = CONFIG.COLS;
+    const rows = CONFIG.ROWS;
+    const pos = (this.rainPoints.geometry.getAttribute("position") as THREE.BufferAttribute);
+    const arr = pos.array as Float32Array;
+    const n = this.rainVel.length;
+    for (let i = 0; i < n; i++) {
+      arr[i * 3 + 1] -= this.rainVel[i] * dt;
+      // Slight wind drift
+      arr[i * 3 + 0] += 2.5 * dt;
+      if (arr[i * 3 + 1] < 0) {
+        arr[i * 3 + 1] = 14 + Math.random() * 6;
+        arr[i * 3 + 0] = (Math.random() - 0.5) * cols * 1.6;
+        arr[i * 3 + 2] = (Math.random() - 0.5) * rows * 1.6;
+      }
+      if (arr[i * 3 + 0] > cols * 0.8) arr[i * 3 + 0] = -cols * 0.8;
+    }
+    pos.needsUpdate = true;
   }
 
   setFocus(col: number, row: number, visible: boolean) {
@@ -561,12 +677,16 @@ export class ThreeWorld {
     return l;
   }
 
+  private _lastRenderTs = 0;
   render() {
     this.updateCamera();
     const t = performance.now();
+    const dt = this._lastRenderTs > 0 ? (t - this._lastRenderTs) / 1000 : 0.016;
+    this._lastRenderTs = t;
     this.updatePlayerLantern(t);
     this.updateTorches(t);
     this.updateMist(t);
+    this.updateRain(dt);
     this.renderer.render(this.scene, this.camera);
   }
 

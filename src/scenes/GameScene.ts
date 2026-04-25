@@ -239,8 +239,15 @@ export class GameScene extends Phaser.Scene {
 
     // Weather system: picks a new kind every in-game morning.
     this.weather = new Weather(this);
-    this.weather.setKind(pickWeather());
+    const initialWeather = pickWeather();
+    this.weather.setKind(initialWeather);
+    this.three?.setWeather(initialWeather);
     this.lastWeatherDay = this.gameTime.day;
+    // Keep 3D scene in sync with 2D Weather state when it changes.
+    this.weather.on("changed", (k: "clear" | "rain" | "fog" | "overcast") => {
+      this.three?.setWeather(k);
+      this.events.emit("weather", k);
+    });
 
     // Resize handling + camera zoom/pan controls
     this.scale.on("resize", () => this.refreshZoom());

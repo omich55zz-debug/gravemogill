@@ -42,18 +42,39 @@ export class UIScene extends Phaser.Scene {
   create() {
     const { width } = this.scale;
 
-    // Top HUD bar
-    const bar = this.add.graphics();
-    bar.fillStyle(0x0c0a14, 0.85).fillRect(0, 0, width, 56);
-    bar.lineStyle(1, 0x3a2f40, 0.6).strokeRect(0, 56, width, 0);
+    // Top HUD bar — gothic layered frame with soft inner gradient.
+    const bar = this.add.graphics().setDepth(1);
+    bar.fillStyle(0x07050c, 0.95).fillRect(0, 0, width, 60);
+    // Inner highlight line
+    bar.lineStyle(1, 0x4a3a22, 0.55).lineBetween(0, 1, width, 1);
+    // Bottom separator — thicker gold line with shadow underneath
+    bar.lineStyle(2, 0x8c6a36, 0.85).lineBetween(0, 58, width, 58);
+    bar.lineStyle(1, 0x1a1208, 0.6).lineBetween(0, 60, width, 60);
+    // Corner flourishes (rune diamond markers) at left/right edges
+    const flourishL = this.add.text(10, 22, "✦", { fontFamily: "serif", fontSize: "16px", color: "#c9a14a" }).setDepth(2);
+    const flourishR = this.add.text(width - 24, 22, "✦", { fontFamily: "serif", fontSize: "16px", color: "#c9a14a" }).setDepth(2).setOrigin(0, 0);
+    this.events.on("destroy", () => { flourishL.destroy(); flourishR.destroy(); });
 
-    this.hudMoney = this.add.text(16, 14, "₽ 0", { fontFamily: "serif", fontSize: "22px", color: "#f0e7c8" });
-    this.add.text(16, 36, "Казна", { fontFamily: "serif", fontSize: "11px", color: "#9a8f72" });
+    // Coin pouch icon next to money amount
+    this.add.text(36, 14, "⚜", { fontFamily: "serif", fontSize: "18px", color: "#c9a14a" }).setDepth(2);
+    this.hudMoney = this.add.text(60, 12, "₽ 0", {
+      fontFamily: "serif", fontSize: "24px", color: "#f5e7bc", fontStyle: "bold",
+    }).setDepth(2);
+    this.add.text(60, 37, "Казна некрополя", {
+      fontFamily: "serif", fontSize: "11px", color: "#8a7a56", fontStyle: "italic",
+    }).setDepth(2);
 
-    this.hudDay = this.add.text(width / 2, 14, "День 1", { fontFamily: "serif", fontSize: "20px", color: "#e8e1cf" }).setOrigin(0.5, 0);
-    this.hudTime = this.add.text(width / 2, 36, "08:00", { fontFamily: "serif", fontSize: "12px", color: "#9a8f72" }).setOrigin(0.5, 0);
+    // Central day + weather/moon indicator
+    this.hudDay = this.add.text(width / 2, 9, "День 1", {
+      fontFamily: "serif", fontSize: "20px", color: "#e8e1cf", fontStyle: "bold",
+    }).setOrigin(0.5, 0).setDepth(2);
+    this.hudTime = this.add.text(width / 2, 34, "☾ 08:00  ·  ☀ Ясно", {
+      fontFamily: "serif", fontSize: "12px", color: "#9a8f72", fontStyle: "italic",
+    }).setOrigin(0.5, 0).setDepth(2);
 
-    this.hudHint = this.add.text(width - 16, 14, "", { fontFamily: "serif", fontSize: "14px", color: "#d7c78b" }).setOrigin(1, 0);
+    this.hudHint = this.add.text(width - 40, 14, "", {
+      fontFamily: "serif", fontSize: "14px", color: "#d7c78b",
+    }).setOrigin(1, 0).setDepth(2);
 
     // Active order panel (top-right, below HUD)
     this.activeOrderPanel = this.add.container(width - 16, 64);
@@ -72,6 +93,8 @@ export class UIScene extends Phaser.Scene {
     this.economy.on("changed", () => this.refreshHud());
     this.gameTime.on("hourChanged", () => this.refreshHud());
     this.gameTime.on("dayChanged", () => this.refreshHud());
+    // Refresh HUD when weather changes so the weather icon updates.
+    this.game_.events.on("weather", () => this.refreshHud());
     this.orders.on("offered", () => this.maybeShowOrderOffer());
     this.orders.on("accepted", () => this.refreshActiveOrders());
     this.orders.on("completed", () => this.refreshActiveOrders());
@@ -175,7 +198,13 @@ export class UIScene extends Phaser.Scene {
   private refreshHud() {
     this.hudMoney.setText(`₽ ${this.economy.money}`);
     this.hudDay.setText(`День ${this.gameTime.day}`);
-    this.hudTime.setText(this.gameTime.timeString());
+    const weather = this.game_?.weather;
+    const h = this.gameTime.hour;
+    // Moon/sun glyph based on hour — uses Unicode symbols that render well in serif fonts.
+    const phase = h >= 19 || h < 6 ? "☾" : h < 9 || h > 17 ? "◐" : "☀";
+    const wname = weather ? (WEATHER_NAME_RU[weather.kind] ?? "") : "";
+    const wicon = weather ? (WEATHER_ICON[weather.kind] ?? "") : "";
+    this.hudTime.setText(`${phase} ${this.gameTime.timeString()}  ·  ${wicon} ${wname}`);
   }
 
   private refreshActionHint() {
