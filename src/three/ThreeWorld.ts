@@ -8,7 +8,11 @@ import {
   flower, fenceWood, fenceIron, fenceStone,
   decorBouquet, decorCandle, decorWreath, decorBible,
   entityPlayer, entityCat, entityZombie, graveHole,
+  tree, grassClump, pond,
 } from "./meshes";
+import {
+  grassGroundTexture, stonePathTexture, earthTexture,
+} from "./textures";
 
 // 1 tile = 1 world unit in Three.js space.
 // Grid (col, row) maps to world (x=col-COLS/2, 0, z=row-ROWS/2).
@@ -53,8 +57,9 @@ export class ThreeWorld {
 
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x10131c);
-    this.scene.fog = new THREE.Fog(0x10131c, 32, 70);
+    // Bright daytime sky (soft cyan-blue gradient faked via solid + fog).
+    this.scene.background = new THREE.Color(0x7eaacb);
+    this.scene.fog = new THREE.Fog(0xa8c4dc, 38, 80);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -73,28 +78,28 @@ export class ThreeWorld {
 
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
 
-    // Lighting — warm low sun, cool sky ambience. Slight blue rim via hemi.
-    this.ambient = new THREE.HemisphereLight(0x8a98c8, 0x3a3230, 0.95);
+    // Lighting — bright daytime: strong warm sun, sky ambience.
+    this.ambient = new THREE.HemisphereLight(0xcfe6ff, 0x5a6a3c, 1.1);
     this.scene.add(this.ambient);
 
-    this.sun = new THREE.DirectionalLight(0xffe9b5, 1.45);
-    this.sun.position.set(-12, 18, -8);
+    this.sun = new THREE.DirectionalLight(0xfff3c8, 2.0);
+    this.sun.position.set(-14, 22, -10);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const s = 30;
+    const s = 34;
     this.sun.shadow.camera.left = -s;
     this.sun.shadow.camera.right = s;
     this.sun.shadow.camera.top = s;
     this.sun.shadow.camera.bottom = -s;
     this.sun.shadow.camera.near = 0.5;
-    this.sun.shadow.camera.far = 80;
+    this.sun.shadow.camera.far = 90;
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    // Subtle warm fill from opposite side
-    const fill = new THREE.DirectionalLight(0x4a6a9a, 0.25);
+    // Cool sky fill from opposite side for subtle rim-light.
+    const fill = new THREE.DirectionalLight(0x9bbfdf, 0.5);
     fill.position.set(15, 10, 12);
     this.scene.add(fill);
 
@@ -127,9 +132,11 @@ export class ThreeWorld {
       pos.setZ(i, (Math.sin(i * 1.3) + Math.cos(i * 2.1)) * 0.015);
     }
     groundGeo.computeVertexNormals();
+    const grassTex = grassGroundTexture();
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x2c3a1a,
-      roughness: 1.0,
+      map: grassTex,
+      color: 0xffffff,
+      roughness: 0.95,
       metalness: 0.0,
     });
     this.ground = new THREE.Mesh(groundGeo, groundMat);
@@ -139,6 +146,7 @@ export class ThreeWorld {
     this.scene.add(this.ground);
 
     this.rebuildTileLayers();
+    this.placeEnvironment(cols, rows);
 
     // Focus ring marker
     const ringGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.98, 0.98));
@@ -148,6 +156,67 @@ export class ThreeWorld {
     this.focusRing.position.y = 0.03;
     this.focusRing.visible = false;
     this.scene.add(this.focusRing);
+  }
+
+  /**
+   * Scatter trees, shrubs, and a pond around the cemetery edges and along the
+   * outer ring. Non-interactive decorations. Placed on non-path/non-plot tiles
+   * so they don't overlap gameplay content.
+   */
+  private placeEnvironment(cols: number, rows: number) {
+    const isGrass = (c: number, r: number) => {
+      return this.tileTypes[r]?.[c] === "grass";
+    };
+    const worldC = (c: number, r: number) => ({
+      x: c - cols / 2 + 0.5,
+      z: r - rows / 2 + 0.5,
+    });
+    // Shuffle a fixed-seed RNG so layout is deterministic per-session.
+    let s = 1234567;
+    const rnd = () => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+    // Trees — bias to the border of the map (first/last 2 cols/rows).
+    const treeVariants: Array<"oak" | "sakura" | "pine"> = ["oak", "oak", "sakura", "sakura", "pine"];
+    for (let i = 0; i < 28; i++) {
+      for (let tries = 0; tries < 30; tries++) {
+        const onEdge = rnd() < 0.7;
+        const c = onEdge
+          ? (rnd() < 0.5 ? (rnd() * 3) | 0 : cols - 1 - ((rnd() * 3) | 0))
+          : (rnd() * cols) | 0;
+        const r = onEdge
+          ? (rnd() < 0.5 ? (rnd() * 3) | 0 : rows - 1 - ((rnd() * 3) | 0))
+          : (rnd() * rows) | 0;
+        if (!isGrass(c, r)) continue;
+        const variant = treeVariants[(rnd() * treeVariants.length) | 0];
+        const t = tree(variant);
+        const { x, z } = worldC(c, r);
+        t.position.set(x + (rnd() - 0.5) * 0.4, 0, z + (rnd() - 0.5) * 0.4);
+        t.scale.setScalar(0.85 + rnd() * 0.35);
+        t.rotation.y = rnd() * Math.PI * 2;
+        this.scene.add(t);
+        break;
+      }
+    }
+    // Grass clumps scattered everywhere on grass.
+    for (let i = 0; i < 80; i++) {
+      for (let tries = 0; tries < 10; tries++) {
+        const c = (rnd() * cols) | 0;
+        const r = (rnd() * rows) | 0;
+        if (!isGrass(c, r)) continue;
+        const gc = grassClump();
+        const { x, z } = worldC(c, r);
+        gc.position.set(x + (rnd() - 0.5) * 0.6, 0, z + (rnd() - 0.5) * 0.6);
+        gc.scale.setScalar(0.7 + rnd() * 0.5);
+        this.scene.add(gc);
+        break;
+      }
+    }
+    // Pond near one edge of map.
+    const pondObj = pond(2.2);
+    pondObj.position.set(-cols / 2 + 4.5, 0, rows / 2 - 4.5);
+    this.scene.add(pondObj);
   }
 
   setFocus(col: number, row: number, visible: boolean) {
@@ -184,11 +253,23 @@ export class ThreeWorld {
 
     const matFor = (t: string): THREE.Material => {
       switch (t) {
-        case "earth":  return new THREE.MeshStandardMaterial({ color: 0x4a321e, roughness: 1 });
-        case "path":   return new THREE.MeshStandardMaterial({ color: 0x7a6e58, roughness: 0.85 });
-        case "plot":   return new THREE.MeshStandardMaterial({ color: 0x3a4420, roughness: 0.95 });
-        case "hole":   return new THREE.MeshStandardMaterial({ color: 0x1e150a, roughness: 1 });
-        default:       return new THREE.MeshStandardMaterial({ color: 0x2c3a1a, roughness: 1 });
+        case "earth": {
+          const m = earthTexture();
+          return new THREE.MeshStandardMaterial({ map: m, roughness: 1 });
+        }
+        case "path": {
+          const m = stonePathTexture();
+          return new THREE.MeshStandardMaterial({ map: m, roughness: 0.85 });
+        }
+        case "plot": {
+          return new THREE.MeshStandardMaterial({ color: 0x5d7a32, roughness: 0.95 });
+        }
+        case "hole": {
+          const m = earthTexture();
+          return new THREE.MeshStandardMaterial({ map: m, color: 0x7a5e3d, roughness: 1 });
+        }
+        default:
+          return new THREE.MeshStandardMaterial({ color: 0x4a7a28, roughness: 1 });
       }
     };
 

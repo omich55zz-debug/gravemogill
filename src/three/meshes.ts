@@ -1,16 +1,98 @@
 import * as THREE from "three";
+import {
+  marbleTexture, graniteTexture, woodTexture, ironTexture,
+  roughStoneTexture, roofTexture, earthTexture, leavesTexture, waterTexture,
+} from "./textures";
 
-// Shared tiny sub-mesh materials — cached so we don't allocate per-instance.
-const stoneA = new THREE.MeshStandardMaterial({ color: 0x8a8577, roughness: 0.92, metalness: 0.0 });
-const stoneB = new THREE.MeshStandardMaterial({ color: 0x6a6458, roughness: 0.92 });
-const stoneDark = new THREE.MeshStandardMaterial({ color: 0x4a4438, roughness: 0.95 });
-const marble = new THREE.MeshStandardMaterial({ color: 0xd9d4c4, roughness: 0.45 });
-const mossGreen = new THREE.MeshStandardMaterial({ color: 0x566b3b, roughness: 0.95 });
-const wood = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.9 });
-const rustMetal = new THREE.MeshStandardMaterial({ color: 0x2e2620, roughness: 0.7, metalness: 0.5 });
-const brass = new THREE.MeshStandardMaterial({ color: 0x9a7a2a, roughness: 0.4, metalness: 0.7 });
-const earth = new THREE.MeshStandardMaterial({ color: 0x3b2b1e, roughness: 1.0 });
-const flowerLeaf = new THREE.MeshStandardMaterial({ color: 0x4a7a3a, roughness: 0.85, side: THREE.DoubleSide });
+// Shared material instances — created on first access so canvases are ready.
+function m(key: string, make: () => THREE.Material): THREE.Material {
+  const cache = m as unknown as { _c?: Map<string, THREE.Material> };
+  if (!cache._c) cache._c = new Map();
+  let v = cache._c.get(key);
+  if (!v) { v = make(); cache._c.set(key, v); }
+  return v;
+}
+
+function stoneAMat(): THREE.Material {
+  return m("stoneA", () => new THREE.MeshStandardMaterial({
+    map: roughStoneTexture(), color: 0xbfb8a8, roughness: 0.9,
+  }));
+}
+function stoneBMat(): THREE.Material {
+  return m("stoneB", () => new THREE.MeshStandardMaterial({
+    map: roughStoneTexture(), color: 0x8a8476, roughness: 0.95,
+  }));
+}
+function stoneDarkMat(): THREE.Material {
+  return m("stoneDark", () => new THREE.MeshStandardMaterial({
+    map: graniteTexture(), color: 0x6a6458, roughness: 0.9,
+  }));
+}
+function marbleMat(): THREE.Material {
+  return m("marble", () => new THREE.MeshStandardMaterial({
+    map: marbleTexture(), color: 0xffffff, roughness: 0.35,
+  }));
+}
+function graniteMat(): THREE.Material {
+  return m("granite", () => new THREE.MeshStandardMaterial({
+    map: graniteTexture(), color: 0xeeeeee, roughness: 0.6, metalness: 0.1,
+  }));
+}
+function mossGreenMat(): THREE.Material {
+  return m("moss", () => new THREE.MeshStandardMaterial({
+    color: 0x55703a, roughness: 0.95,
+  }));
+}
+function woodMat(): THREE.Material {
+  return m("wood", () => new THREE.MeshStandardMaterial({
+    map: woodTexture(), color: 0xffffff, roughness: 0.9,
+  }));
+}
+function rustMetalMat(): THREE.Material {
+  return m("iron", () => new THREE.MeshStandardMaterial({
+    map: ironTexture(), color: 0xffffff, roughness: 0.6, metalness: 0.6,
+  }));
+}
+function brassMat(): THREE.Material {
+  return m("brass", () => new THREE.MeshStandardMaterial({
+    color: 0xc08e3a, roughness: 0.35, metalness: 0.85,
+  }));
+}
+function earthMat(): THREE.Material {
+  return m("earthM", () => new THREE.MeshStandardMaterial({
+    map: earthTexture(), color: 0xffffff, roughness: 1,
+  }));
+}
+function flowerLeafMat(): THREE.Material {
+  return m("leaf", () => new THREE.MeshStandardMaterial({
+    color: 0x4a7a3a, roughness: 0.85, side: THREE.DoubleSide,
+  }));
+}
+function roofMat(): THREE.Material {
+  return m("roofMat", () => new THREE.MeshStandardMaterial({
+    map: roofTexture(), color: 0x2a2420, roughness: 0.75,
+  }));
+}
+function waterMat(): THREE.Material {
+  return m("waterMat", () => new THREE.MeshPhysicalMaterial({
+    map: waterTexture(), color: 0x3a6b94, roughness: 0.1, metalness: 0.0,
+    transparent: true, opacity: 0.85, reflectivity: 0.5, clearcoat: 0.8,
+  }));
+}
+
+// Backwards-compat aliases used throughout this file.
+const stoneA = stoneAMat();
+const stoneB = stoneBMat();
+const stoneDark = stoneDarkMat();
+const marble = marbleMat();
+const granite = graniteMat();
+const mossGreen = mossGreenMat();
+const wood = woodMat();
+const rustMetal = rustMetalMat();
+const brass = brassMat();
+const earth = earthMat();
+const flowerLeaf = flowerLeafMat();
+const roofSlate = roofMat();
 
 export type MeshFactory = () => THREE.Object3D;
 
@@ -61,10 +143,10 @@ export function tombCross(): THREE.Group {
   const base = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), stoneB);
   base.position.y = 0.1;
   g.add(base);
-  const vert = mkMesh(new THREE.BoxGeometry(0.18, 1.2, 0.18), stoneA);
+  const vert = mkMesh(new THREE.BoxGeometry(0.18, 1.2, 0.18), granite);
   vert.position.y = 0.8;
   g.add(vert);
-  const horiz = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.16), stoneA);
+  const horiz = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.16), granite);
   horiz.position.y = 1.05;
   g.add(horiz);
   return g;
@@ -191,7 +273,7 @@ export function buildingMausoleum(): THREE.Group {
     g.add(p);
   }
   // Roof pyramid
-  const roof = mkMesh(new THREE.ConeGeometry(2.0, 0.9, 4), stoneDark);
+  const roof = mkMesh(new THREE.ConeGeometry(2.0, 0.9, 4), roofSlate);
   roof.rotation.y = Math.PI / 4;
   roof.position.y = 2.95;
   roof.scale.set(1.05, 1, 0.85);
@@ -237,7 +319,7 @@ export function buildingChapel(): THREE.Group {
   const tower = mkMesh(new THREE.BoxGeometry(1.1, 3.4, 1.1), stoneA);
   tower.position.set(-1.85, 2.0, 0);
   g.add(tower);
-  const towerRoof = mkMesh(new THREE.ConeGeometry(0.85, 1.2, 4), stoneDark);
+  const towerRoof = mkMesh(new THREE.ConeGeometry(0.85, 1.2, 4), roofSlate);
   towerRoof.position.set(-1.85, 4.3, 0);
   towerRoof.rotation.y = Math.PI / 4;
   g.add(towerRoof);
@@ -619,5 +701,98 @@ export function graveHole(): THREE.Group {
   const darker = mkMesh(new THREE.BoxGeometry(0.75, 0.08, 0.5), new THREE.MeshStandardMaterial({ color: 0x1a0f08, roughness: 1 }));
   darker.position.y = -0.02;
   g.add(darker);
+  return g;
+}
+
+// ---------------- Trees ----------------
+
+/**
+ * Procedural tree: trunk, a few branches, dense canopy of small leaf-quads.
+ * variant: "oak" (green) | "sakura" (pink) | "pine" (dark green).
+ */
+export function tree(variant: "oak" | "sakura" | "pine" = "oak"): THREE.Group {
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x5a3e22, roughness: 0.95 });
+  const trunkH = 2.4 + Math.random() * 0.8;
+  const trunk = mkMesh(new THREE.CylinderGeometry(0.12, 0.18, trunkH, 8), trunkMat);
+  trunk.position.y = trunkH / 2;
+  g.add(trunk);
+  // Main branches (cones)
+  for (let i = 0; i < 3; i++) {
+    const br = mkMesh(new THREE.CylinderGeometry(0.04, 0.08, 0.6, 5), trunkMat);
+    const a = (i / 3) * Math.PI * 2 + Math.random() * 0.6;
+    br.position.set(Math.cos(a) * 0.25, trunkH * 0.75, Math.sin(a) * 0.25);
+    br.rotation.z = Math.cos(a) * 0.8;
+    br.rotation.x = Math.sin(a) * 0.8;
+    g.add(br);
+  }
+  // Canopy — lots of small spheres tinted with leaf color.
+  const colors: Record<typeof variant, number> = {
+    oak: 0x4e8a2e,
+    sakura: 0xffb3d6,
+    pine: 0x27502a,
+  };
+  const color = colors[variant];
+  const leafMat = new THREE.MeshStandardMaterial({
+    map: leavesTexture(color),
+    color: 0xffffff,
+    roughness: 0.8,
+  });
+  const canopyH = trunkH + 0.4;
+  const clumps = variant === "pine" ? 18 : 34;
+  const radiusBase = variant === "pine" ? 0.6 : 1.1;
+  for (let i = 0; i < clumps; i++) {
+    const r = 0.28 + Math.random() * 0.25;
+    const leaf = mkMesh(new THREE.IcosahedronGeometry(r, 1), leafMat);
+    const heightOff = variant === "pine" ? (i / clumps) * 2 : Math.random() * 1.6 - 0.3;
+    const radius = radiusBase * (variant === "pine" ? (1 - i / clumps) : 1);
+    const a = Math.random() * Math.PI * 2;
+    leaf.position.set(
+      Math.cos(a) * radius * (0.5 + Math.random() * 0.5),
+      canopyH + heightOff,
+      Math.sin(a) * radius * (0.5 + Math.random() * 0.5)
+    );
+    g.add(leaf);
+  }
+  // Center big clump
+  const center = mkMesh(new THREE.IcosahedronGeometry(variant === "pine" ? 0.7 : 0.95, 2), leafMat);
+  center.position.y = canopyH + (variant === "pine" ? 0.3 : 0.2);
+  g.add(center);
+  return g;
+}
+
+// ---------------- Grass clumps ----------------
+export function grassClump(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x5a9a30, roughness: 0.9, side: THREE.DoubleSide });
+  const blades = 12;
+  for (let i = 0; i < blades; i++) {
+    const h = 0.15 + Math.random() * 0.25;
+    const blade = mkMesh(new THREE.PlaneGeometry(0.04, h), mat);
+    const a = (i / blades) * Math.PI * 2 + Math.random() * 0.5;
+    blade.position.set(Math.cos(a) * 0.08, h / 2, Math.sin(a) * 0.08);
+    blade.rotation.y = Math.random() * Math.PI;
+    g.add(blade);
+  }
+  return g;
+}
+
+// ---------------- Pond / water feature ----------------
+export function pond(radius = 2.5): THREE.Group {
+  const g = new THREE.Group();
+  // Recessed pool
+  const rimMat = new THREE.MeshStandardMaterial({ map: roughStoneTexture(), color: 0x7a7268, roughness: 0.95 });
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.25, 6, 40), rimMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.08;
+  rim.receiveShadow = true;
+  rim.castShadow = true;
+  g.add(rim);
+  // Water disc
+  const water = new THREE.Mesh(new THREE.CircleGeometry(radius - 0.05, 40), waterMat());
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.06;
+  water.receiveShadow = true;
+  g.add(water);
   return g;
 }
