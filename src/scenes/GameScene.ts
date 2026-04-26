@@ -59,6 +59,10 @@ export class GameScene extends Phaser.Scene {
   private propMeshes: THREE.Object3D[] = [];
   /** Mesh tracking for upgradable buildings, keyed by `${col},${row}`. */
   private buildingMeshes = new Map<string, THREE.Object3D>();
+  /** Animation time accumulator (seconds). Used by mesh idle/walk anims. */
+  private _animT = 0;
+  private _catLastX = 0;
+  private _catLastZ = 0;
 
   // Highlight for the "focused" tile in front of the player
   focusRect!: Phaser.GameObjects.Graphics;
@@ -312,26 +316,53 @@ export class GameScene extends Phaser.Scene {
     this.zombies = this.zombies.filter(z => !z.dead);
 
     // ----- Sync Three.js meshes to Phaser entity positions -----
+    // Animation time accumulator (seconds). Drives idle / walk bobs & sways
+    // for the player, cat, and zombies. We compute everything per-frame so
+    // it stays in lockstep with the actual game tick.
+    this._animT += dt;
+    const at = this._animT;
     if (this.player.mesh3D) {
       const p = this.three.phaserToThree(this.player.x, this.player.y);
-      this.player.mesh3D.position.set(p.x, 0, p.z);
-      this.player.mesh3D.visible = true;
+      // Walking speed proxy from stick magnitude (0..1)
+      const stickMag = Math.hypot(this.player.stick.x, this.player.stick.y);
+      const walkBob = stickMag > 0.05
+        ? Math.abs(Math.sin(at * 9)) * 0.05
+        : Math.sin(at * 1.6) * 0.018; // gentle idle breathing
+      const sway = stickMag > 0.05
+        ? Math.sin(at * 9) * 0.04 * stickMag
+        : Math.sin(at * 1.4) * 0.012;
+      this.player.mesh3D.position.set(p.x, walkBob, p.z);
       this.player.mesh3D.rotation.y = this.player.facingYaw;
-      // Keep staff-orb light tracking the player's facing.
+      this.player.mesh3D.rotation.z = sway;
+      this.player.mesh3D.visible = true;
       this.three.setPlayerYaw(this.player.facingYaw);
     }
     if (this.cat.mesh3D) {
       const c = this.three.phaserToThree(this.cat.sprite.x, this.cat.sprite.y);
-      this.cat.mesh3D.position.set(c.x, 0, c.z);
-      this.cat.mesh3D.rotation.y = this.cat.facingYaw;
+      // Cat: slow chest-rise breathing + occasional tail-twitch yaw wiggle
+      const breathe = Math.sin(at * 2.4) * 0.012;
+      const twitch = Math.sin(at * 14) * 0.04 + Math.sin(at * 0.7) * 0.02;
+      this.cat.mesh3D.position.set(c.x, breathe, c.z);
+      this.cat.mesh3D.rotation.y = this.cat.facingYaw + twitch;
+      // Slight side-to-side rock when walking
+      const dx = c.x - (this._catLastX ?? c.x);
+      const dz = c.z - (this._catLastZ ?? c.z);
+      const moving = Math.hypot(dx, dz) > 0.001;
+      this.cat.mesh3D.rotation.z = moving ? Math.sin(at * 11) * 0.05 : 0;
+      this._catLastX = c.x; this._catLastZ = c.z;
     }
     for (const z of this.zombies) {
       if (!z.mesh3D) continue;
       const zp = this.three.phaserToThree(z.sprite.x, z.sprite.y);
       // Rise animation: push down into ground during emerge phase.
       const sink = (1 - z.emergePhase) * 1.2;
-      z.mesh3D.position.set(zp.x, -sink, zp.z);
+      // Eerie sway — different phase per zombie so they look unsynced.
+      const phase = (z.sprite.x * 0.07 + z.sprite.y * 0.05);
+      const sway = Math.sin(at * 2.6 + phase) * 0.07;
+      const lurch = Math.abs(Math.sin(at * 5 + phase)) * 0.04;
+      z.mesh3D.position.set(zp.x, -sink + lurch, zp.z);
       z.mesh3D.rotation.y = z.facingYaw;
+      z.mesh3D.rotation.z = sway;
     }
     // Center the orbit camera on the player.
     const op = this.three.phaserToThree(this.player.x, this.player.y);

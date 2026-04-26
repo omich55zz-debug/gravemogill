@@ -14,7 +14,7 @@ import {
   tree, grassClump, pond, raven,
 } from "./meshes";
 import {
-  grassGroundTexture, stonePathTexture, earthTexture, nightSkyTexture,
+  grassGroundTexture, stonePathTexture, earthTexture,
 } from "./textures";
 import { loadCharacter, robeColors, orbColors } from "../systems/Customization";
 
@@ -74,11 +74,13 @@ export class ThreeWorld {
 
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
-    // Dark gothic night — night sky panorama, very dense low-visibility fog.
-    this.scene.background = nightSkyTexture();
-    // Top-down camera sits ~16 units away; push fog far enough that the
-    // whole cemetery block is visible but still atmospheric.
-    this.scene.fog = new THREE.Fog(0x0a0f18, 22, 70);
+    // Default to a bright outdoor sky color; weather sub-system overrides
+    // this on each weather change. We deliberately do NOT use the night-sky
+    // panorama here anymore — most of the time the player sees daytime.
+    this.scene.background = new THREE.Color(0xb8d0ec);
+    // Top-down camera sits ~16 units away; push fog far away so the whole
+    // cemetery reads as a sunny outdoor scene (no murky atmosphere by default).
+    this.scene.fog = new THREE.Fog(0xb8d0ec, 90, 220);
 
     // Detect mobile / low-power devices: cap pixel ratio more aggressively and
     // disable antialiasing (relying on browser's MSAA fallback / FXAA-by-DPR).
@@ -304,9 +306,8 @@ export class ThreeWorld {
       }
     }
 
-    // Drifting volumetric mist — a handful of soft alpha planes that slowly
-    // drift across the cemetery. The update loop fades and repositions them.
-    this.buildMist(cols, rows);
+    // Mist planes intentionally disabled — user wants a clear sunny scene.
+    void cols; void rows;
   }
 
   // ---------------- Mist / fog planes ----------------
@@ -317,6 +318,7 @@ export class ThreeWorld {
     phase: number;
   }> = [];
 
+  // @ts-expect-error: kept for backwards compatibility but no longer invoked.
   private buildMist(cols: number, rows: number) {
     // Soft radial alpha canvas used as a mist texture.
     const c = document.createElement("canvas");
@@ -402,29 +404,29 @@ export class ThreeWorld {
     const fog = this.scene.fog as THREE.Fog;
     switch (kind) {
       case "sunny":
-        // Bright golden daytime — warm sun, soft pale-blue sky, fog far away.
-        fog.color.setHex(0x9bb6d8);
-        fog.near = 60; fog.far = 140;
-        this.setCloudColor(0x9bb6d8);
+        // Bright golden daytime — warm sun, soft pale-blue sky, fog VERY far.
+        fog.color.setHex(0xb8d0ec);
+        fog.near = 90; fog.far = 220;
+        this.setCloudColor(0xb8d0ec);
         this.setSunColor(0xfff2c8);
-        this.setSunMoonIntensity(2.3, 1.05);
-        this.renderer.toneMappingExposure = 1.25;
+        this.setSunMoonIntensity(2.6, 1.15);
+        this.renderer.toneMappingExposure = 1.35;
         break;
       case "clear":
-        fog.color.setHex(0x0a1028);
-        fog.near = 45; fog.far = 110;
-        this.setCloudColor(0x0a1028);
-        this.setSunColor(0xb8caff);
-        this.setSunMoonIntensity(1.1, 0.45);
-        this.renderer.toneMappingExposure = 0.9;
+        fog.color.setHex(0x141a3a);
+        fog.near = 70; fog.far = 170;
+        this.setCloudColor(0x141a3a);
+        this.setSunColor(0xc0d0ff);
+        this.setSunMoonIntensity(1.3, 0.55);
+        this.renderer.toneMappingExposure = 1.0;
         break;
       case "overcast":
-        fog.color.setHex(0x1a1e26);
-        fog.near = 28; fog.far = 70;
-        this.setCloudColor(0x1a1e26);
-        this.setSunColor(0x9aa5b8);
-        this.setSunMoonIntensity(0.55, 0.3);
-        this.renderer.toneMappingExposure = 0.9;
+        fog.color.setHex(0x252b34);
+        fog.near = 55; fog.far = 130;
+        this.setCloudColor(0x252b34);
+        this.setSunColor(0xb0bccc);
+        this.setSunMoonIntensity(0.9, 0.5);
+        this.renderer.toneMappingExposure = 1.0;
         break;
       case "rain":
         fog.color.setHex(0x141820);
@@ -451,12 +453,14 @@ export class ThreeWorld {
   }
 
   private setCloudColor(color: number) {
-    // Tint the scene background uniformly so sky feels consistent with fog.
+    // Sky background follows weather: sunny=pale blue, clear=deep blue,
+    // overcast=grey. Replace any prior texture with a solid color so the
+    // tint is unambiguous and reads on phone screens too.
     if (this.scene.background instanceof THREE.Color) {
       (this.scene.background as THREE.Color).setHex(color);
+    } else {
+      this.scene.background = new THREE.Color(color);
     }
-    // If background is a texture (nightSkyTexture), layer fog by adjusting
-    // ambient hemisphere tint so distant elements blend.
     (this.ambient.color as THREE.Color).setHex(color);
   }
 

@@ -132,13 +132,11 @@ export class Weather extends Phaser.Events.EventEmitter {
 }
 
 /** Simple weighted rollout for a new day's weather.
- *  Biased strongly toward sunny/clear days so the cemetery reads well.
+ *  Per user request: NO rain, NO fog. Mostly bright sunny days.
  */
 export function pickWeather(): WeatherKind {
   const r = Math.random();
-  if (r < 0.50) return "sunny";     // 50% — bright daylight
-  if (r < 0.78) return "clear";     // 28% — clear (mild moonlit night)
-  if (r < 0.88) return "overcast";  // 10%
-  if (r < 0.96) return "rain";      //  8%
-  return "fog";                      //  4%
+  if (r < 0.78) return "sunny";     // 78% — bright daylight
+  if (r < 0.92) return "clear";     // 14% — clear (mild moonlit night)
+  return "overcast";                 //  8% — overcast (rare, but adds variety)
 }
