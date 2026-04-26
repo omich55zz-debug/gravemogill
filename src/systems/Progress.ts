@@ -60,7 +60,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "crystal_finder",
     title: "Кристальный охотник",
-    description: "Собрать первый кристалл с помощью кошки.",
+    description: "Собрать первый кристалл с помощью Юпитера.",
     icon: "♦",
     rewardCoins: 20,
   },
@@ -102,7 +102,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "rare_crystal",
     title: "Редкая находка",
-    description: "Кошка нашла редкий фиолетовый кристалл.",
+    description: "Юпитер нашёл редкий фиолетовый кристалл.",
     icon: "❖",
     rewardCoins: 150,
   },

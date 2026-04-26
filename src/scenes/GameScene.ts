@@ -203,7 +203,7 @@ export class GameScene extends Phaser.Scene {
     this.cat.on("crystalCollected", (value: number, x: number, y: number, rare?: boolean) => {
       this.economy.earn(value);
       const color = rare ? "#e7b5ff" : "#a8f0ff";
-      const label = rare ? `+${value}₽ РЕДКИЙ кристалл!` : `+${value}₽ кристалл`;
+      const label = rare ? `+${value}₽ Юпитер принёс РЕДКИЙ кристалл!` : `+${value}₽ Юпитер принёс кристалл`;
       this.showFloatText(label, x, y, color);
       audio.play(rare ? "rareCrystal" : "crystal");
       this.tryUnlock("crystal_finder");

@@ -98,7 +98,7 @@ export class MenuScene extends Phaser.Scene {
     title.setShadow(0, 0, "#a88038", 18, true, true);
 
     // Subtitle with elvish arch
-    this.add.text(width / 2, titleY + 52, "Древнего Эльфа-Мага", {
+    this.add.text(width / 2, titleY + 52, "Дедушки-Могильщика", {
       fontFamily: "serif", fontSize: "28px", color: "#b8a36e", fontStyle: "italic",
     }).setOrigin(0.5).setShadow(2, 2, "#000", 6);
 
@@ -157,7 +157,7 @@ export class MenuScene extends Phaser.Scene {
     const customY = primaryY + (saveExists ? 138 : 78);
     const customBtn = this.add.rectangle(width / 2, customY, 300, 36, 0x1a1820)
       .setStrokeStyle(1, 0x6a5a36).setInteractive({ useHandCursor: true });
-    const customLabel = this.add.text(width / 2, customY, "✦ Облик мага", {
+    const customLabel = this.add.text(width / 2, customY, "✦ Облик могильщика", {
       fontFamily: "serif", fontSize: "15px", color: "#d7c78b",
     }).setOrigin(0.5);
     customBtn.on("pointerover", () => customBtn.setFillStyle(0x2a2230));
@@ -167,11 +167,11 @@ export class MenuScene extends Phaser.Scene {
     customLabel.on("pointerup", () => this.openCustomizationModal());
 
     this.add.text(width / 2, height - 58,
-      "Вы — Древний Эльф-Маг, последний страж родового некрополя.",
+      "Вы — Дедушка-могильщик, хранитель родового кладбища.",
       { fontFamily: "serif", fontSize: "14px", color: "#a29680" }
     ).setOrigin(0.5).setShadow(1, 1, "#000", 2);
     this.add.text(width / 2, height - 36,
-      "Посох светится. Духи шепчут. Работа не ждёт.",
+      "Лопата наготове, фонарь горит, Кот Юпитер рядом. Работа не ждёт.",
       { fontFamily: "serif", fontSize: "13px", color: "#7e7260", fontStyle: "italic" }
     ).setOrigin(0.5);
 
@@ -315,7 +315,7 @@ export class MenuScene extends Phaser.Scene {
     const panel = this.add.rectangle(width / 2, height / 2, W, H, 0x14101c, 0.98)
       .setStrokeStyle(2, 0x8c6a36);
     c.add(panel);
-    const t = this.add.text(width / 2, height / 2 - H / 2 + 18, "Облик Древнего Эльфа-Мага", {
+    const t = this.add.text(width / 2, height / 2 - H / 2 + 18, "Облик Дедушки-могильщика", {
       fontFamily: "serif", fontSize: "20px", color: "#f0e7c8", fontStyle: "bold",
     }).setOrigin(0.5);
     c.add(t);
@@ -369,9 +369,9 @@ export class MenuScene extends Phaser.Scene {
         c.add([bg, tx]);
       });
     };
-    drawRow("Мантия",   ROBES, () => curRobe, id => { curRobe = id as RobeId; }, 0);
-    drawRow("Голова",   HOODS, () => curHood, id => { curHood = id as HoodId; }, 1);
-    drawRow("Кристалл", ORBS,  () => curOrb,  id => { curOrb  = id as OrbId;  }, 2);
+    drawRow("Куртка", ROBES, () => curRobe, id => { curRobe = id as RobeId; }, 0);
+    drawRow("Голова",  HOODS, () => curHood, id => { curHood = id as HoodId; }, 1);
+    drawRow("Фонарь",  ORBS,  () => curOrb,  id => { curOrb  = id as OrbId;  }, 2);
     updatePreview();
 
     // Save button

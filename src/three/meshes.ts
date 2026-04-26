@@ -1262,26 +1262,35 @@ export interface PlayerLook {
   hoodStyle?: "down" | "up" | "wizard" | "circlet";
 }
 
+/**
+ * Главный герой — Дедушка-могильщик.
+ *
+ * Силуэт: лысина с венчиком седых волос, белая борода, рабочая куртка
+ * с подтяжками, серые штаны, кожаные сапоги. Носит лопату и фонарь
+ * на поясе. Цвета куртки/штанов/фонаря настраиваются через PlayerLook
+ * (поле robePrimary → coat, robeTrim → trim/suspenders, orbColor →
+ * lantern). hoodStyle меняет головной убор.
+ */
 export function entityPlayer(spec?: PlayerLook): THREE.Group {
-  const robePrimary = spec?.robePrimary ?? 0x1a1230;
-  const robeTrim    = spec?.robeTrim    ?? 0x8c6a2a;
-  const orbColor    = spec?.orbColor    ?? 0x6fc8ff;
-  const orbEmissive = spec?.orbEmissive ?? 0x3a9cff;
+  const coatColor   = spec?.robePrimary ?? 0x6a4a26; // worn brown work coat
+  const trimColor   = spec?.robeTrim    ?? 0x8a4a14; // suspenders / trim
+  const lanternColor    = spec?.orbColor    ?? 0xffc864; // warm lantern flame
+  const lanternEmissive = spec?.orbEmissive ?? 0xff8030;
   const hoodStyle   = spec?.hoodStyle   ?? "down";
 
   const g = new THREE.Group();
-  // Articulated legs — each leg is a pivot at the hip with a thigh + boot
-  // child so we can drive a walk-cycle from the update loop.
-  const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.85 });
-  const trousMat = new THREE.MeshStandardMaterial({ color: 0x2a1f1a, roughness: 0.9 });
+
+  // Articulated legs (hip pivots) — grey work trousers + leather boots.
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x261810, roughness: 0.85 });
+  const trousMat = new THREE.MeshStandardMaterial({ color: 0x3c3a36, roughness: 0.95 });
   const buildLeg = (sign: 1 | -1) => {
     const pivot = new THREE.Group();
-    pivot.position.set(sign * 0.11, 0.4, 0);
-    const thigh = mkMesh(new THREE.CylinderGeometry(0.07, 0.06, 0.32, 6), trousMat);
-    thigh.position.y = -0.16;
+    pivot.position.set(sign * 0.11, 0.42, 0);
+    const thigh = mkMesh(new THREE.CylinderGeometry(0.085, 0.075, 0.36, 6), trousMat);
+    thigh.position.y = -0.18;
     pivot.add(thigh);
-    const boot = mkMesh(new THREE.BoxGeometry(0.16, 0.1, 0.2), bootMat);
-    boot.position.y = -0.36;
+    const boot = mkMesh(new THREE.BoxGeometry(0.18, 0.12, 0.24), bootMat);
+    boot.position.y = -0.42;
     pivot.add(boot);
     g.add(pivot);
     return pivot;
@@ -1289,130 +1298,164 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
   const legL = buildLeg(-1);
   const legR = buildLeg(1);
 
-  // Long flowing robe — deep purple-black with subtle sheen.
-  const robeMat = new THREE.MeshStandardMaterial({
-    color: robePrimary,
-    roughness: 0.55,
-    metalness: 0.15,
+  // Stout body — barrel torso in a worn coat.
+  const coatMat = new THREE.MeshStandardMaterial({
+    color: coatColor, roughness: 0.85,
   });
-  const robeLower = mkMesh(new THREE.CylinderGeometry(0.32, 0.42, 0.75, 10), robeMat);
-  robeLower.position.y = 0.48;
-  g.add(robeLower);
-  const robeUpper = mkMesh(new THREE.CylinderGeometry(0.26, 0.32, 0.3, 10), robeMat);
-  robeUpper.position.y = 0.98;
-  g.add(robeUpper);
-
-  // Belt with glowing gem buckle
-  const beltMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.9 });
-  const belt = mkMesh(new THREE.CylinderGeometry(0.345, 0.345, 0.07, 12), beltMat);
-  belt.position.y = 0.75;
-  g.add(belt);
-  const buckle = mkMesh(
-    new THREE.IcosahedronGeometry(0.06, 0),
-    new THREE.MeshStandardMaterial({
-      color: 0xc04020, emissive: 0x602010, emissiveIntensity: 1.2, roughness: 0.3,
-    })
+  const body = mkMesh(new THREE.CylinderGeometry(0.28, 0.32, 0.55, 12), coatMat);
+  body.position.y = 0.85;
+  g.add(body);
+  // Coat lapel triangle on the chest
+  const lapelMat = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.9 });
+  const lapel = mkMesh(new THREE.ConeGeometry(0.18, 0.3, 4), lapelMat);
+  lapel.position.set(0, 0.9, 0.27);
+  lapel.rotation.x = Math.PI; // point down
+  lapel.rotation.y = Math.PI / 4;
+  lapel.scale.set(1, 1, 0.3);
+  g.add(lapel);
+  // Belt
+  const belt = mkMesh(
+    new THREE.CylinderGeometry(0.31, 0.31, 0.06, 12),
+    new THREE.MeshStandardMaterial({ color: 0x141008, roughness: 0.95 })
   );
-  buckle.position.set(0, 0.75, 0.34);
+  belt.position.y = 0.62;
+  g.add(belt);
+  // Brass buckle
+  const buckle = mkMesh(
+    new THREE.BoxGeometry(0.08, 0.05, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0xb88040, metalness: 0.6, roughness: 0.4 })
+  );
+  buckle.position.set(0, 0.62, 0.31);
   g.add(buckle);
 
-  // Shoulder mantle / pauldrons — darker fabric flared at shoulders.
-  const mantleMat = new THREE.MeshStandardMaterial({ color: 0x0c0818, roughness: 0.8 });
-  const mantle = mkMesh(new THREE.CylinderGeometry(0.38, 0.26, 0.2, 12, 1, true), mantleMat);
-  mantle.position.y = 1.06;
-  g.add(mantle);
+  // Suspenders (two straps from belt up over the shoulders) — colored as trim.
+  const suspMat = new THREE.MeshStandardMaterial({ color: trimColor, roughness: 0.75 });
+  for (const sx of [-1, 1]) {
+    const susp = mkMesh(new THREE.BoxGeometry(0.05, 0.5, 0.03), suspMat);
+    susp.position.set(sx * 0.12, 0.9, 0.27);
+    g.add(susp);
+    // Suspender on the back too
+    const suspBack = mkMesh(new THREE.BoxGeometry(0.05, 0.5, 0.03), suspMat);
+    suspBack.position.set(sx * 0.12, 0.9, -0.27);
+    g.add(suspBack);
+  }
 
-  // Gold trim at hem (customizable)
-  const goldMat = new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 });
-  const hem = mkMesh(new THREE.TorusGeometry(0.42, 0.018, 5, 20), goldMat);
-  hem.rotation.x = Math.PI / 2;
-  hem.position.y = 0.13;
-  g.add(hem);
+  // Shirt collar peeking above the coat — off-white/cream.
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0xd8c8a8, roughness: 0.85 });
+  const collar = mkMesh(new THREE.CylinderGeometry(0.18, 0.21, 0.1, 12), shirtMat);
+  collar.position.y = 1.16;
+  g.add(collar);
 
-  // Head (pale elf skin)
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.7 });
-  const head = mkMesh(new THREE.SphereGeometry(0.17, 12, 10), skinMat);
-  head.position.y = 1.28;
+  // Head — warm tan skin
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe6c4a0, roughness: 0.85 });
+  const head = mkMesh(new THREE.SphereGeometry(0.18, 14, 12), skinMat);
+  head.position.y = 1.34;
   g.add(head);
+  // Round nose
+  const nose = mkMesh(new THREE.SphereGeometry(0.045, 8, 6), skinMat);
+  nose.position.set(0, 1.32, 0.18);
+  g.add(nose);
+  // Bushy white eyebrows
+  const eyebrowMat = new THREE.MeshStandardMaterial({ color: 0xeae6e0, roughness: 0.95 });
+  for (const sx of [-1, 1]) {
+    const brow = mkMesh(new THREE.BoxGeometry(0.07, 0.025, 0.04), eyebrowMat);
+    brow.position.set(sx * 0.07, 1.4, 0.16);
+    brow.rotation.z = sx * 0.18;
+    g.add(brow);
+  }
+  // Friendly little eyes
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x202018, roughness: 0.4 });
+  for (const sx of [-1, 1]) {
+    const eye = mkMesh(new THREE.SphereGeometry(0.018, 6, 5), eyeMat);
+    eye.position.set(sx * 0.07, 1.36, 0.17);
+    g.add(eye);
+  }
+  // Big thick white beard — wraps from cheek to cheek under the chin.
+  const beardMat = new THREE.MeshStandardMaterial({ color: 0xeeeae2, roughness: 0.95 });
+  const beardMain = mkMesh(new THREE.SphereGeometry(0.16, 14, 12), beardMat);
+  beardMain.position.set(0, 1.22, 0.06);
+  beardMain.scale.set(1.05, 0.85, 0.95);
+  g.add(beardMain);
+  // Mustache
+  const mustache = mkMesh(new THREE.BoxGeometry(0.14, 0.04, 0.05), beardMat);
+  mustache.position.set(0, 1.28, 0.18);
+  g.add(mustache);
+  // Side hair (venchik) — only when bald-style head selected
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0xd6d0c4, roughness: 0.8 });
 
-  // Pointy elf ears
-  const earGeo = new THREE.ConeGeometry(0.05, 0.16, 5);
-  const earL = mkMesh(earGeo, skinMat);
-  earL.position.set(-0.17, 1.32, -0.02);
-  earL.rotation.z = Math.PI / 2 - 0.25;
-  g.add(earL);
-  const earR = mkMesh(earGeo, skinMat);
-  earR.position.set(0.17, 1.32, -0.02);
-  earR.rotation.z = -Math.PI / 2 + 0.25;
-  g.add(earR);
-
-  // Long silver hair falling behind the shoulders
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0xd8d8e4, roughness: 0.5 });
-  const hairBack = mkMesh(new THREE.BoxGeometry(0.36, 0.42, 0.08), hairMat);
-  hairBack.position.set(0, 1.18, -0.18);
-  g.add(hairBack);
-  const hairTop = mkMesh(new THREE.SphereGeometry(0.19, 10, 8), hairMat);
-  hairTop.position.y = 1.36;
-  hairTop.scale.set(1, 0.6, 1);
-  g.add(hairTop);
-
-  // Hood / cap variant — controlled by hoodStyle.
-  const hoodMat = new THREE.MeshStandardMaterial({ color: 0x0c0818, roughness: 0.85 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 });
+  // Headgear — interpret old hoodStyle field as gravedigger headwear.
+  // "down" → bald head with venchik (side hair only) — the canonical look.
+  // "up" → grey newsboy flat cap.
+  // "wizard" → black formal stovepipe hat (funeral director).
+  // "circlet" → woolen beanie.
   if (hoodStyle === "down") {
-    const hood = mkMesh(new THREE.ConeGeometry(0.22, 0.55, 8), hoodMat);
-    hood.position.set(0, 1.18, -0.22);
-    hood.rotation.x = -0.25;
-    g.add(hood);
+    // Side fringe of hair (a thin torus around the back of the head)
+    const fringe = mkMesh(new THREE.TorusGeometry(0.17, 0.035, 6, 18), hairMat);
+    fringe.rotation.x = Math.PI / 2;
+    fringe.position.y = 1.31;
+    g.add(fringe);
+    // Slight back-of-head hair patch
+    const back = mkMesh(new THREE.SphereGeometry(0.09, 8, 6), hairMat);
+    back.position.set(0, 1.34, -0.13);
+    back.scale.set(1, 0.6, 0.6);
+    g.add(back);
   } else if (hoodStyle === "up") {
-    // Hood pulled up: drape covering top of head
-    const hoodTop = mkMesh(new THREE.SphereGeometry(0.21, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2), hoodMat);
-    hoodTop.position.set(0, 1.34, 0);
-    g.add(hoodTop);
-    const hoodBack = mkMesh(new THREE.ConeGeometry(0.18, 0.4, 8), hoodMat);
-    hoodBack.position.set(0, 1.22, -0.18);
-    hoodBack.rotation.x = -0.4;
-    g.add(hoodBack);
+    // Newsboy flat cap (grey)
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x4a4a48, roughness: 0.9 });
+    const cap = mkMesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+    cap.position.y = 1.39;
+    cap.scale.set(1, 0.55, 1);
+    g.add(cap);
+    const visor = mkMesh(new THREE.BoxGeometry(0.32, 0.03, 0.12), capMat);
+    visor.position.set(0, 1.36, 0.14);
+    g.add(visor);
   } else if (hoodStyle === "wizard") {
-    // Tall pointy wizard hat
-    const brim = mkMesh(new THREE.CylinderGeometry(0.24, 0.24, 0.025, 14), hoodMat);
-    brim.position.y = 1.42;
+    // Formal black stovepipe (mortician hat)
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.6 });
+    const brim = mkMesh(new THREE.CylinderGeometry(0.26, 0.26, 0.03, 18), hatMat);
+    brim.position.y = 1.45;
     g.add(brim);
-    const cone = mkMesh(new THREE.ConeGeometry(0.15, 0.6, 12), hoodMat);
-    cone.position.y = 1.74;
-    cone.rotation.z = 0.12;
-    g.add(cone);
-    const tip = mkMesh(new THREE.SphereGeometry(0.025, 8, 6), trimMat);
-    tip.position.set(0.04, 2.05, 0);
-    g.add(tip);
-    // Star ornament on the front of the hat
-    const star = mkMesh(new THREE.IcosahedronGeometry(0.04, 0),
-      new THREE.MeshStandardMaterial({ color: orbColor, emissive: orbEmissive, emissiveIntensity: 1.2 }));
-    star.position.set(0, 1.6, 0.13);
-    g.add(star);
+    const top = mkMesh(new THREE.CylinderGeometry(0.18, 0.19, 0.34, 18), hatMat);
+    top.position.y = 1.63;
+    g.add(top);
+    // Trim band around the base
+    const band = mkMesh(new THREE.CylinderGeometry(0.192, 0.192, 0.05, 18),
+      new THREE.MeshStandardMaterial({ color: trimColor, roughness: 0.5 }));
+    band.position.y = 1.48;
+    g.add(band);
   } else if (hoodStyle === "circlet") {
-    // Thin metal circlet with a center gem
-    const ring = mkMesh(new THREE.TorusGeometry(0.18, 0.012, 8, 24), trimMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 1.36;
-    g.add(ring);
-    const gem = mkMesh(new THREE.OctahedronGeometry(0.035, 0),
-      new THREE.MeshStandardMaterial({ color: orbColor, emissive: orbEmissive, emissiveIntensity: 1.5 }));
-    gem.position.set(0, 1.36, 0.18);
-    g.add(gem);
+    // Knit beanie — ribbed cylinder + dome.
+    const beanieMat = new THREE.MeshStandardMaterial({ color: 0x2c4860, roughness: 0.95 });
+    const dome = mkMesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), beanieMat);
+    dome.position.y = 1.37;
+    g.add(dome);
+    const rib = mkMesh(new THREE.CylinderGeometry(0.2, 0.2, 0.07, 16), beanieMat);
+    rib.position.y = 1.32;
+    g.add(rib);
+    // Pompom
+    const pom = mkMesh(new THREE.SphereGeometry(0.05, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xa05050, roughness: 0.95 }));
+    pom.position.y = 1.5;
+    g.add(pom);
   }
 
   // ------- Arms (animated): pivot at the shoulder so they swing -------
-  const sleeveMat = new THREE.MeshStandardMaterial({ color: robePrimary, roughness: 0.7 });
-  const handMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.75 });
+  const handMat = new THREE.MeshStandardMaterial({ color: 0xe6c4a0, roughness: 0.85 });
   const buildArm = (sign: 1 | -1) => {
     const pivot = new THREE.Group();
-    pivot.position.set(sign * 0.28, 1.05, 0);
-    const sleeve = mkMesh(new THREE.CylinderGeometry(0.06, 0.07, 0.5, 8), sleeveMat);
+    pivot.position.set(sign * 0.3, 1.06, 0);
+    const sleeve = mkMesh(new THREE.CylinderGeometry(0.07, 0.075, 0.5, 8), coatMat);
     sleeve.position.y = -0.25;
     pivot.add(sleeve);
-    const hand = mkMesh(new THREE.SphereGeometry(0.06, 8, 6), handMat);
-    hand.position.y = -0.52;
+    // Cuff — slightly darker
+    const cuff = mkMesh(
+      new THREE.CylinderGeometry(0.077, 0.077, 0.04, 8),
+      new THREE.MeshStandardMaterial({ color: 0x3a2614, roughness: 0.9 })
+    );
+    cuff.position.y = -0.5;
+    pivot.add(cuff);
+    const hand = mkMesh(new THREE.SphereGeometry(0.065, 8, 6), handMat);
+    hand.position.y = -0.55;
     pivot.add(hand);
     g.add(pivot);
     return pivot;
@@ -1420,63 +1463,77 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
   const armL = buildArm(-1);
   const armR = buildArm(1);
 
-  // ------- Cape attached to the back, swings on movement -------
-  const capePivot = new THREE.Group();
-  capePivot.position.set(0, 1.06, -0.18);
-  const capeMat = new THREE.MeshStandardMaterial({
-    color: robePrimary, roughness: 0.7, side: THREE.DoubleSide,
-  });
-  const capeGeo = new THREE.PlaneGeometry(0.62, 0.95, 1, 4);
-  const cape = mkMesh(capeGeo, capeMat);
-  cape.position.y = -0.4;
-  capePivot.add(cape);
-  // Gold trim along the bottom of the cape (small torus arc)
-  const capeTrim = mkMesh(
-    new THREE.BoxGeometry(0.62, 0.012, 0.02),
-    new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 })
+  // ------- Lantern hanging from the belt (uses orbColor) -------
+  const lanternFrame = mkMesh(
+    new THREE.BoxGeometry(0.13, 0.18, 0.13),
+    new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.7 })
   );
-  capeTrim.position.y = -0.85;
-  capePivot.add(capeTrim);
-  g.add(capePivot);
-
-  // ------- Staff held to the right (parented to right arm so it swings too) -------
-  const staffMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x3a2712, roughness: 0.9 });
-  const staff = mkMesh(new THREE.CylinderGeometry(0.025, 0.03, 1.7, 6), staffMat);
-  staff.position.set(0.34, 0.85, 0.12);
-  staff.rotation.z = -0.08;
-  g.add(staff);
-  // Staff clawed top (three prongs holding the orb)
-  const prongMat = new THREE.MeshStandardMaterial({ color: 0x2a1f10, roughness: 0.75 });
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2;
-    const prong = mkMesh(new THREE.CylinderGeometry(0.015, 0.008, 0.18, 4), prongMat);
-    prong.position.set(0.34 + Math.cos(a) * 0.04, 1.78, 0.12 + Math.sin(a) * 0.04);
-    prong.rotation.z = Math.cos(a) * 0.4;
-    prong.rotation.x = Math.sin(a) * 0.4;
-    g.add(prong);
-  }
-  // Glowing orb (customizable color)
-  const orbMat = new THREE.MeshStandardMaterial({
-    color: orbColor,
-    emissive: orbEmissive,
-    emissiveIntensity: 2.2,
-    roughness: 0.15,
-    transparent: true,
-    opacity: 0.9,
-  });
-  const orb = mkMesh(new THREE.SphereGeometry(0.1, 14, 10), orbMat);
-  orb.position.set(0.34, 1.82, 0.12);
-  g.add(orb);
-  // Orb halo sprite
+  lanternFrame.position.set(-0.32, 0.55, 0.05);
+  g.add(lanternFrame);
+  const lanternGlass = mkMesh(
+    new THREE.SphereGeometry(0.06, 10, 8),
+    new THREE.MeshStandardMaterial({
+      color: lanternColor,
+      emissive: lanternEmissive,
+      emissiveIntensity: 1.6,
+      transparent: true,
+      opacity: 0.85,
+    })
+  );
+  lanternGlass.position.copy(lanternFrame.position);
+  g.add(lanternGlass);
+  // Soft halo around the lantern (re-uses the existing orb-halo animation)
   const haloMat = new THREE.MeshBasicMaterial({
-    color: orbColor, transparent: true, opacity: 0.35, depthWrite: false,
+    color: lanternColor, transparent: true, opacity: 0.3, depthWrite: false,
   });
-  const halo = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), haloMat);
-  halo.position.copy(orb.position);
+  const halo = mkMesh(new THREE.SphereGeometry(0.13, 10, 8), haloMat);
+  halo.position.copy(lanternFrame.position);
   g.add(halo);
 
-  // Expose animatable parts so the GameScene update loop can drive them.
-  (g.userData as any).parts = { armL, armR, legL, legR, capePivot, orb, halo };
+  // ------- Shovel held in the right hand (parented to scene root, not arm,
+  // so it doesn't get scaled by the arm-swing rotation but reads like he's
+  // holding it loosely at his side.) -------
+  const shovelHandleMat = new THREE.MeshStandardMaterial({
+    map: woodTexture(), color: 0x6a4622, roughness: 0.9,
+  });
+  const shovelHandle = mkMesh(new THREE.CylinderGeometry(0.025, 0.028, 1.5, 6), shovelHandleMat);
+  shovelHandle.position.set(0.32, 0.85, 0.18);
+  shovelHandle.rotation.z = -0.18;
+  g.add(shovelHandle);
+  // Handle T-grip at the top
+  const tgrip = mkMesh(new THREE.BoxGeometry(0.12, 0.05, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x4a2e16, roughness: 0.9 }));
+  tgrip.position.set(0.18, 1.55, 0.18);
+  tgrip.rotation.z = -0.18;
+  g.add(tgrip);
+  // Steel blade
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color: 0x707880, roughness: 0.4, metalness: 0.7,
+  });
+  const blade = mkMesh(new THREE.BoxGeometry(0.16, 0.22, 0.02), bladeMat);
+  blade.position.set(0.46, 0.18, 0.18);
+  blade.rotation.z = -0.18;
+  g.add(blade);
+  // Blade ferrule (band where it meets the handle)
+  const ferrule = mkMesh(new THREE.CylinderGeometry(0.032, 0.032, 0.06, 8),
+    new THREE.MeshStandardMaterial({ color: 0x404048, metalness: 0.6, roughness: 0.5 }));
+  ferrule.position.set(0.43, 0.34, 0.18);
+  ferrule.rotation.z = -0.18;
+  g.add(ferrule);
+
+  // capePivot retained as an empty placeholder so existing animation code
+  // that references parts.capePivot still works (no actual mesh attached —
+  // grandpa doesn't wear a cape).
+  const capePivot = new THREE.Group();
+  g.add(capePivot);
+
+  // Expose animatable parts. We reuse the names `orb`/`halo` so the
+  // existing GameScene update logic just keeps working — they now drive
+  // the lantern glow instead of an arcane crystal.
+  (g.userData as any).parts = {
+    armL, armR, legL, legR, capePivot,
+    orb: lanternGlass, halo,
+  };
 
   return g;
 }
