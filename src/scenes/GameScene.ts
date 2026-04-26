@@ -12,7 +12,8 @@ import { itemById, type CatalogItem } from "../data/catalog";
 import { progress } from "../systems/Progress";
 import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
-import { Weather, pickWeather } from "../systems/Weather";
+import { reputation } from "../systems/Reputation";
+import { Weather, pickWeather, type WeatherKind } from "../systems/Weather";
 import { shop } from "../systems/Shop";
 import { ThreeWorld } from "../three/ThreeWorld";
 
@@ -244,7 +245,7 @@ export class GameScene extends Phaser.Scene {
     this.three?.setWeather(initialWeather);
     this.lastWeatherDay = this.gameTime.day;
     // Keep 3D scene in sync with 2D Weather state when it changes.
-    this.weather.on("changed", (k: "clear" | "rain" | "fog" | "overcast") => {
+    this.weather.on("changed", (k: WeatherKind) => {
       this.three?.setWeather(k);
       this.events.emit("weather", k);
     });
@@ -804,6 +805,10 @@ export class GameScene extends Phaser.Scene {
     this.orders.pending = s.pending ?? [];
     this.orders.active = s.active ?? [];
     this.orders.history = s.history ?? [];
+    // Reputation
+    if (typeof s.reputation === "number") {
+      reputation.load({ points: s.reputation });
+    }
     // Restore player position if available.
     if (typeof s.playerX === "number" && typeof s.playerY === "number") {
       this.player.sprite.x = s.playerX;

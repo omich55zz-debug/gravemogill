@@ -7,6 +7,8 @@ import {
   buildingMausoleum, buildingChapel, buildingCrypt, buildingBigCross, buildingGate,
   flower, fenceWood, fenceIron, fenceStone,
   decorBouquet, decorCandle, decorWreath, decorBible,
+  decorBonePile, decorSkull, decorLanternPole, decorStoneUrn,
+  decorDirtMound, decorCrossStake, decorPumpkin,
   entityPlayer, entityCat, entityZombie, graveHole,
   tree, grassClump, pond, raven,
 } from "./meshes";
@@ -263,6 +265,34 @@ export class ThreeWorld {
       this.scene.add(rv);
     }
 
+    // Scatter decor across grass tiles. Each item type has its own count;
+    // we sample random tiles, skip non-grass, and place with a small jitter.
+    type DecorSpec = { make: () => THREE.Group; count: number; rotate: boolean };
+    const decorSpecs: DecorSpec[] = [
+      { make: decorBonePile,      count: 6, rotate: true  },
+      { make: decorSkull,         count: 4, rotate: true  },
+      { make: decorStoneUrn,      count: 3, rotate: false },
+      { make: decorDirtMound,     count: 5, rotate: true  },
+      { make: decorCrossStake,    count: 5, rotate: true  },
+      { make: decorPumpkin,       count: 4, rotate: true  },
+      { make: decorLanternPole,   count: 6, rotate: false },
+    ];
+    for (const spec of decorSpecs) {
+      let placed = 0, attempts = 0;
+      while (placed < spec.count && attempts < spec.count * 8) {
+        attempts++;
+        const c = (rnd() * cols) | 0;
+        const r = (rnd() * rows) | 0;
+        if (!isGrass(c, r)) continue;
+        const { x, z } = worldC(c, r);
+        const item = spec.make();
+        item.position.set(x + (rnd() - 0.5) * 0.5, 0, z + (rnd() - 0.5) * 0.5);
+        if (spec.rotate) item.rotation.y = rnd() * Math.PI * 2;
+        this.scene.add(item);
+        placed++;
+      }
+    }
+
     // Drifting volumetric mist — a handful of soft alpha planes that slowly
     // drift across the cemetery. The update loop fades and repositions them.
     this.buildMist(cols, rows);
@@ -346,12 +376,12 @@ export class ThreeWorld {
   }
 
   // ---------------- Weather ----------------
-  weather: "clear" | "rain" | "fog" | "overcast" = "clear";
+  weather: "sunny" | "clear" | "rain" | "fog" | "overcast" = "clear";
   private rainPoints?: THREE.Points;
   private rainVel: Float32Array = new Float32Array(0);
   private rainCount = 800;
 
-  setWeather(kind: "clear" | "rain" | "fog" | "overcast") {
+  setWeather(kind: "sunny" | "clear" | "rain" | "fog" | "overcast") {
     if (this.weather === kind) return;
     this.weather = kind;
     // Fog density + color change per weather.
@@ -360,32 +390,53 @@ export class ThreeWorld {
     }
     const fog = this.scene.fog as THREE.Fog;
     switch (kind) {
+      case "sunny":
+        // Bright golden daytime — warm sun, soft pale-blue sky, fog far away.
+        fog.color.setHex(0x9bb6d8);
+        fog.near = 60; fog.far = 140;
+        this.setCloudColor(0x9bb6d8);
+        this.setSunColor(0xfff2c8);
+        this.setSunMoonIntensity(2.3, 1.05);
+        this.renderer.toneMappingExposure = 1.25;
+        break;
       case "clear":
         fog.color.setHex(0x0a1028);
         fog.near = 45; fog.far = 110;
         this.setCloudColor(0x0a1028);
+        this.setSunColor(0xb8caff);
         this.setSunMoonIntensity(1.1, 0.45);
+        this.renderer.toneMappingExposure = 0.9;
         break;
       case "overcast":
         fog.color.setHex(0x1a1e26);
         fog.near = 28; fog.far = 70;
         this.setCloudColor(0x1a1e26);
+        this.setSunColor(0x9aa5b8);
         this.setSunMoonIntensity(0.55, 0.3);
+        this.renderer.toneMappingExposure = 0.9;
         break;
       case "rain":
         fog.color.setHex(0x141820);
         fog.near = 18; fog.far = 55;
         this.setCloudColor(0x141820);
+        this.setSunColor(0x8090a0);
         this.setSunMoonIntensity(0.5, 0.25);
+        this.renderer.toneMappingExposure = 0.85;
         break;
       case "fog":
         fog.color.setHex(0x2a3040);
         fog.near = 8; fog.far = 32;
         this.setCloudColor(0x2a3040);
+        this.setSunColor(0xa0a8b8);
         this.setSunMoonIntensity(0.6, 0.3);
+        this.renderer.toneMappingExposure = 0.85;
         break;
     }
     this.toggleRain(kind === "rain");
+  }
+
+  private setSunColor(color: number) {
+    (this.sun.color as THREE.Color).setHex(color);
   }
 
   private setCloudColor(color: number) {

@@ -13,6 +13,7 @@ import type { Economy } from "./Economy";
 import type { TimeSystem } from "./TimeSystem";
 import { OrderSystem, type Order } from "./OrderSystem";
 import type { Grid } from "../utils/grid";
+import { reputation } from "./Reputation";
 
 const KEY = "gravemogill.save.v1";
 
@@ -43,6 +44,7 @@ interface SaveData {
   pending: Order[];
   active: Order[];
   history: Order[];
+  reputation?: number;
 }
 
 export function hasSave(): boolean {
@@ -99,6 +101,7 @@ export function saveGame(state: {
       pending: state.orders.pending,
       active: state.orders.active,
       history: state.orders.history,
+      reputation: reputation.points,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
@@ -133,6 +136,7 @@ export interface LoadResult {
   playerX?: number;
   playerY?: number;
   savedAtMs: number;
+  reputation?: number;
 }
 
 export function loadIntoLoadResult(): LoadResult | null {

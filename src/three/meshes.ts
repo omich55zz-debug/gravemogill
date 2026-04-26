@@ -792,6 +792,227 @@ export function decorBible(): THREE.Group {
   return g;
 }
 
+// ---------------- Scatter decor (placed by ThreeWorld during scene build) ----------------
+
+/** Pile of bones lying on the grass. Creepy ambient detail. */
+export function decorBonePile(): THREE.Group {
+  const g = new THREE.Group();
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0xd6cdaa, roughness: 0.85 });
+  const dustMat = new THREE.MeshStandardMaterial({ color: 0x4a3f2c, roughness: 1.0 });
+  const dust = mkMesh(new THREE.CircleGeometry(0.32, 16), dustMat, false, true);
+  dust.rotation.x = -Math.PI / 2;
+  dust.position.y = 0.005;
+  g.add(dust);
+  // Long bones (femur-like) made of cylinder + 2 endcaps.
+  for (let i = 0; i < 4; i++) {
+    const bone = new THREE.Group();
+    const shaft = mkMesh(new THREE.CylinderGeometry(0.025, 0.025, 0.36, 8), boneMat);
+    shaft.rotation.z = Math.PI / 2;
+    bone.add(shaft);
+    const c1 = mkMesh(new THREE.SphereGeometry(0.04, 8, 6), boneMat);
+    c1.position.x = -0.18;
+    bone.add(c1);
+    const c2 = mkMesh(new THREE.SphereGeometry(0.04, 8, 6), boneMat);
+    c2.position.x = 0.18;
+    bone.add(c2);
+    bone.rotation.y = (Math.PI / 4) * i + 0.3;
+    bone.position.set((i - 1.5) * 0.06, 0.04, (i % 2 === 0 ? -0.05 : 0.05));
+    g.add(bone);
+  }
+  return g;
+}
+
+/** Skull on the grass — small ambient horror prop. */
+export function decorSkull(): THREE.Group {
+  const g = new THREE.Group();
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0xd9d0ad, roughness: 0.8 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050300, roughness: 1.0 });
+  const skull = mkMesh(new THREE.SphereGeometry(0.13, 14, 10), boneMat);
+  skull.position.y = 0.13;
+  skull.scale.set(1, 0.95, 1.05);
+  g.add(skull);
+  // Jaw
+  const jaw = mkMesh(new THREE.BoxGeometry(0.18, 0.05, 0.16), boneMat);
+  jaw.position.y = 0.045;
+  g.add(jaw);
+  // Eye sockets
+  const eL = mkMesh(new THREE.SphereGeometry(0.035, 8, 6), eyeMat);
+  eL.position.set(-0.05, 0.14, 0.11);
+  g.add(eL);
+  const eR = mkMesh(new THREE.SphereGeometry(0.035, 8, 6), eyeMat);
+  eR.position.set(0.05, 0.14, 0.11);
+  g.add(eR);
+  // Nose hole
+  const nose = mkMesh(new THREE.ConeGeometry(0.02, 0.04, 6), eyeMat);
+  nose.position.set(0, 0.1, 0.13);
+  nose.rotation.x = Math.PI;
+  g.add(nose);
+  // Tiny teeth row
+  for (let i = -2; i <= 2; i++) {
+    const t = mkMesh(new THREE.BoxGeometry(0.018, 0.025, 0.018), boneMat);
+    t.position.set(i * 0.022, 0.075, 0.085);
+    g.add(t);
+  }
+  return g;
+}
+
+/** Tall lantern post — wrought-iron pole with a glowing brass lamp. */
+export function decorLanternPole(): THREE.Group {
+  const g = new THREE.Group();
+  const baseStone = mkMesh(new THREE.CylinderGeometry(0.16, 0.2, 0.12, 12), stoneDark);
+  baseStone.position.y = 0.06;
+  g.add(baseStone);
+  const pole = mkMesh(new THREE.CylinderGeometry(0.035, 0.045, 1.6, 8), rustMetal);
+  pole.position.y = 0.92;
+  g.add(pole);
+  // Decorative midring
+  const ring = mkMesh(new THREE.TorusGeometry(0.07, 0.014, 6, 16), brass);
+  ring.position.y = 1.05;
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  // Lamp head — brass cage
+  const lampBase = mkMesh(new THREE.CylinderGeometry(0.13, 0.11, 0.05, 12), brass);
+  lampBase.position.y = 1.62;
+  g.add(lampBase);
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0xffe7a8, emissive: 0xffa648, emissiveIntensity: 1.6,
+    transparent: true, opacity: 0.85, roughness: 0.4,
+  });
+  const glass = mkMesh(new THREE.BoxGeometry(0.18, 0.22, 0.18), glassMat);
+  glass.position.y = 1.78;
+  g.add(glass);
+  // Cage frame (4 thin verticals)
+  for (let i = 0; i < 4; i++) {
+    const bar = mkMesh(new THREE.BoxGeometry(0.012, 0.24, 0.012), brass);
+    const a = (Math.PI / 2) * i + Math.PI / 4;
+    bar.position.set(Math.cos(a) * 0.092, 1.78, Math.sin(a) * 0.092);
+    g.add(bar);
+  }
+  // Cap (pyramid)
+  const cap = mkMesh(new THREE.ConeGeometry(0.16, 0.12, 4), brass);
+  cap.position.y = 1.97;
+  cap.rotation.y = Math.PI / 4;
+  g.add(cap);
+  // Light source
+  const lamp = new THREE.PointLight(0xffa346, 0.85, 4.5, 1.6);
+  lamp.position.set(0, 1.78, 0);
+  g.add(lamp);
+  return g;
+}
+
+/** Stone urn / vase — ornate funerary urn with handles. */
+export function decorStoneUrn(): THREE.Group {
+  const g = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6e6a64, roughness: 0.95 });
+  const base = mkMesh(new THREE.CylinderGeometry(0.16, 0.18, 0.06, 14), stoneMat);
+  base.position.y = 0.03;
+  g.add(base);
+  const stem = mkMesh(new THREE.CylinderGeometry(0.08, 0.12, 0.1, 12), stoneMat);
+  stem.position.y = 0.1;
+  g.add(stem);
+  const body = mkMesh(new THREE.SphereGeometry(0.18, 14, 10), stoneMat);
+  body.position.y = 0.28;
+  body.scale.set(1, 1.15, 1);
+  g.add(body);
+  const neck = mkMesh(new THREE.CylinderGeometry(0.1, 0.13, 0.06, 12), stoneMat);
+  neck.position.y = 0.46;
+  g.add(neck);
+  // Lip
+  const lip = mkMesh(new THREE.TorusGeometry(0.12, 0.018, 6, 14), stoneMat);
+  lip.rotation.x = Math.PI / 2;
+  lip.position.y = 0.5;
+  g.add(lip);
+  // Two handle scrolls
+  for (const s of [-1, 1]) {
+    const h = mkMesh(new THREE.TorusGeometry(0.06, 0.014, 6, 12), stoneMat);
+    h.position.set(s * 0.18, 0.32, 0);
+    h.rotation.y = Math.PI / 2;
+    g.add(h);
+  }
+  // Wilted flowers spilling out
+  const flowerMat1 = flowerMat(0x6a3a3a, 0.05);
+  for (let i = 0; i < 3; i++) {
+    const stem2 = mkMesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), mossGreen);
+    stem2.position.set(Math.cos(i * 2) * 0.04, 0.55, Math.sin(i * 2) * 0.04);
+    stem2.rotation.set(0.3 * Math.cos(i), 0, 0.3 * Math.sin(i));
+    g.add(stem2);
+    const head = mkMesh(new THREE.SphereGeometry(0.025, 8, 6), flowerMat1);
+    head.position.set(Math.cos(i * 2) * 0.06, 0.62, Math.sin(i * 2) * 0.06);
+    g.add(head);
+  }
+  return g;
+}
+
+/** Pile of fresh-dug earth — moist dark soil with a shovel mark. */
+export function decorDirtMound(): THREE.Group {
+  const g = new THREE.Group();
+  const dirtMat = new THREE.MeshStandardMaterial({ color: 0x2d2218, roughness: 1.0 });
+  const wetDirtMat = new THREE.MeshStandardMaterial({ color: 0x1d1610, roughness: 0.9 });
+  const big = mkMesh(new THREE.SphereGeometry(0.32, 12, 8), dirtMat);
+  big.position.y = 0.1;
+  big.scale.set(1, 0.5, 1);
+  g.add(big);
+  const top = mkMesh(new THREE.SphereGeometry(0.18, 10, 7), wetDirtMat);
+  top.position.y = 0.18;
+  top.scale.set(1, 0.7, 1);
+  g.add(top);
+  // Couple of stones
+  for (let i = 0; i < 4; i++) {
+    const s = mkMesh(new THREE.SphereGeometry(0.04, 6, 5), stoneDark);
+    s.position.set(Math.cos(i * 1.6) * 0.22, 0.1 + (i % 2) * 0.05, Math.sin(i * 1.6) * 0.22);
+    g.add(s);
+  }
+  return g;
+}
+
+/** Wooden cross-stake driven into the ground — peasant marker. */
+export function decorCrossStake(): THREE.Group {
+  const g = new THREE.Group();
+  const vert = mkMesh(new THREE.BoxGeometry(0.07, 0.55, 0.07), wood);
+  vert.position.y = 0.27;
+  g.add(vert);
+  const horiz = mkMesh(new THREE.BoxGeometry(0.32, 0.06, 0.06), wood);
+  horiz.position.y = 0.4;
+  g.add(horiz);
+  // Rope tying joint
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b4d2e, roughness: 0.95 });
+  const rope = mkMesh(new THREE.TorusGeometry(0.05, 0.012, 6, 12), ropeMat);
+  rope.position.y = 0.4;
+  rope.rotation.x = Math.PI / 2;
+  g.add(rope);
+  return g;
+}
+
+/** Pumpkin — gourd with carved face (low-poly Halloween). */
+export function decorPumpkin(): THREE.Group {
+  const g = new THREE.Group();
+  const orangeMat = new THREE.MeshStandardMaterial({ color: 0xc26a26, roughness: 0.7 });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x4a3a18, roughness: 0.95 });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xffaa44, emissive: 0xff8a30, emissiveIntensity: 1.2, roughness: 0.6,
+  });
+  // Body — squashed sphere
+  const body = mkMesh(new THREE.SphereGeometry(0.18, 14, 10), orangeMat);
+  body.position.y = 0.16;
+  body.scale.set(1.1, 0.8, 1.1);
+  g.add(body);
+  // Stem
+  const stem = mkMesh(new THREE.CylinderGeometry(0.025, 0.04, 0.07, 6), stemMat);
+  stem.position.y = 0.32;
+  g.add(stem);
+  // Carved triangular eyes + mouth (emissive)
+  for (const x of [-0.06, 0.06]) {
+    const eye = mkMesh(new THREE.ConeGeometry(0.025, 0.03, 3), eyeMat);
+    eye.position.set(x, 0.18, 0.16);
+    eye.rotation.x = Math.PI / 2;
+    g.add(eye);
+  }
+  const mouth = mkMesh(new THREE.BoxGeometry(0.1, 0.03, 0.02), eyeMat);
+  mouth.position.set(0, 0.12, 0.18);
+  g.add(mouth);
+  return g;
+}
+
 // ---------------- Entities ----------------
 
 /**

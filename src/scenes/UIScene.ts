@@ -11,6 +11,7 @@ import { audio } from "../systems/Audio";
 import { shop, SHOVELS, HELPERS } from "../systems/Shop";
 import { progress, ACHIEVEMENTS } from "../systems/Progress";
 import { WEATHER_NAME_RU, WEATHER_ICON } from "../systems/Weather";
+import { reputation } from "../systems/Reputation";
 import { i18n } from "../systems/I18n";
 
 /**
@@ -21,6 +22,9 @@ export class UIScene extends Phaser.Scene {
   private hudDay!: Phaser.GameObjects.Text;
   private hudTime!: Phaser.GameObjects.Text;
   private hudHint!: Phaser.GameObjects.Text;
+  private hudRepRank!: Phaser.GameObjects.Text;
+  private hudRepBar!: Phaser.GameObjects.Graphics;
+  private hudRepLabel!: Phaser.GameObjects.Text;
   private activeOrderPanel!: Phaser.GameObjects.Container;
   private orderOfferPanel?: Phaser.GameObjects.Container;
   private contextPanel?: Phaser.GameObjects.Container;
@@ -76,8 +80,25 @@ export class UIScene extends Phaser.Scene {
       fontFamily: "serif", fontSize: "14px", color: "#d7c78b",
     }).setOrigin(1, 0).setDepth(2);
 
+    // Reputation panel (just below the top HUD bar, left side)
+    const rx = 14, ry = 66;
+    const repBg = this.add.graphics().setDepth(1);
+    repBg.fillStyle(0x07050c, 0.85).fillRoundedRect(rx, ry, 218, 42, 5);
+    repBg.lineStyle(1, 0x8c6a36, 0.7).strokeRoundedRect(rx, ry, 218, 42, 5);
+    this.add.text(rx + 8, ry + 4, "✦", { fontFamily: "serif", fontSize: "14px", color: "#c9a14a" }).setDepth(2);
+    this.hudRepRank = this.add.text(rx + 24, ry + 3, "Новичок", {
+      fontFamily: "serif", fontSize: "13px", color: "#e8d9a8", fontStyle: "bold",
+    }).setDepth(2);
+    this.hudRepLabel = this.add.text(rx + 210, ry + 4, "0 / 30", {
+      fontFamily: "serif", fontSize: "11px", color: "#9a8f72",
+    }).setOrigin(1, 0).setDepth(2);
+    this.hudRepBar = this.add.graphics().setDepth(2);
+    this.add.text(rx + 8, ry + 26, "Репутация", {
+      fontFamily: "serif", fontSize: "10px", color: "#7d6e4c", fontStyle: "italic",
+    }).setDepth(2);
+
     // Active order panel (top-right, below HUD)
-    this.activeOrderPanel = this.add.container(width - 16, 64);
+    this.activeOrderPanel = this.add.container(width - 16, 116);
 
     // Bottom controls: virtual stick + action button
     this.createVirtualStick();
@@ -95,6 +116,10 @@ export class UIScene extends Phaser.Scene {
     this.gameTime.on("dayChanged", () => this.refreshHud());
     // Refresh HUD when weather changes so the weather icon updates.
     this.game_.events.on("weather", () => this.refreshHud());
+    reputation.on("changed", (_pts: number, delta: number) => {
+      this.refreshHud();
+      this.flashReputationDelta(delta);
+    });
     this.orders.on("offered", () => this.maybeShowOrderOffer());
     this.orders.on("accepted", () => this.refreshActiveOrders());
     this.orders.on("completed", () => this.refreshActiveOrders());
@@ -205,6 +230,42 @@ export class UIScene extends Phaser.Scene {
     const wname = weather ? (WEATHER_NAME_RU[weather.kind] ?? "") : "";
     const wicon = weather ? (WEATHER_ICON[weather.kind] ?? "") : "";
     this.hudTime.setText(`${phase} ${this.gameTime.timeString()}  ·  ${wicon} ${wname}`);
+    this.refreshReputation();
+  }
+
+  private refreshReputation() {
+    const rank = reputation.rank();
+    const next = reputation.nextRank();
+    this.hudRepRank.setText(rank.name);
+    const rx = 14, ry = 66;
+    this.hudRepBar.clear();
+    this.hudRepBar.fillStyle(0x1a120a, 1).fillRect(rx + 8, ry + 38, 200, 3);
+    if (next) {
+      const span = next.threshold - rank.threshold;
+      const pos = reputation.points - rank.threshold;
+      const pct = Math.max(0, Math.min(1, span > 0 ? pos / span : 0));
+      this.hudRepBar.fillStyle(0xc9a14a, 1).fillRect(rx + 8, ry + 38, 200 * pct, 3);
+      this.hudRepLabel.setText(`${reputation.points} / ${next.threshold}`);
+    } else {
+      this.hudRepBar.fillStyle(0xe6c266, 1).fillRect(rx + 8, ry + 38, 200, 3);
+      this.hudRepLabel.setText(`${reputation.points} ★`);
+    }
+  }
+
+  private flashReputationDelta(delta: number) {
+    if (!delta) return;
+    const txt = this.add.text(220, 70, `${delta > 0 ? "+" : ""}${delta}`, {
+      fontFamily: "serif", fontSize: "14px",
+      color: delta > 0 ? "#c9e98e" : "#e9928e", fontStyle: "bold",
+    }).setDepth(3);
+    this.tweens.add({
+      targets: txt,
+      y: 50,
+      alpha: 0,
+      duration: 1200,
+      ease: "Sine.easeOut",
+      onComplete: () => txt.destroy(),
+    });
   }
 
   private refreshActionHint() {
@@ -221,7 +282,7 @@ export class UIScene extends Phaser.Scene {
 
   private layoutResponsive() {
     const { width, height } = this.scale;
-    this.activeOrderPanel.setPosition(width - 16, 64);
+    this.activeOrderPanel.setPosition(width - 16, 116);
 
     this.stickBase.setPosition(90, height - 90);
     this.stickKnob.setPosition(90, height - 90);

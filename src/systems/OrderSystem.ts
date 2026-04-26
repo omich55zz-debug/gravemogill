@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { generatePerson } from "../data/names";
+import { reputation } from "./Reputation";
 
 export type OrderTier = "modest" | "decent" | "lavish";
 
@@ -113,9 +114,17 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
     }
     // Path bonus: each path tile adjacent to the grave gives +3.
     payout += pathBonusTiles * 3;
+    // Reputation rank gives a flat payout multiplier on perfect / under / over.
+    if (verdict !== "late") {
+      payout = Math.floor(payout * reputation.multiplier());
+    }
     order.completed = true;
     this.active = this.active.filter(o => o.id !== order.id);
     this.history.push(order);
+    // Reputation gain depends on verdict.
+    if (verdict === "perfect") reputation.awardCompleted(2);
+    else if (verdict === "under" || verdict === "over") reputation.awardCompleted(1);
+    else reputation.penalizeFailed(1); // "late"
     this.emit("completed", { order, payout, verdict });
     return { payout, verdict };
   }
@@ -126,6 +135,7 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
         o.failed = true;
         this.active = this.active.filter(x => x.id !== o.id);
         this.history.push(o);
+        reputation.penalizeFailed(2);
         this.emit("failed", o);
       }
     }
