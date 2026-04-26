@@ -42,31 +42,60 @@ function rand(seed: number): () => number {
 export function grassTexture(): THREE.CanvasTexture {
   const key = "grass";
   if (cache.has(key)) return cache.get(key)!;
-  const size = 256;
+  const size = 512;
   const cnv = makeCanvas(size, size);
   const ctx = cnv.getContext("2d")!;
 
-  const grad = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size);
-  grad.addColorStop(0, "#2a3e1a");
-  grad.addColorStop(0.6, "#1a2e14");
-  grad.addColorStop(1, "#0f1e0c");
+  // Brighter base for sunny daylight; subtle radial vignette so tiles
+  // don't reveal a grid when repeated.
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 20, size / 2, size / 2, size);
+  grad.addColorStop(0, "#496c2c");
+  grad.addColorStop(0.55, "#3a5824");
+  grad.addColorStop(1, "#2a4218");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
   const rnd = rand(103);
-  // Thousands of tiny dim blades
-  for (let i = 0; i < 4200; i++) {
+  // Many tiny dim blades — thicker layer so the texture reads up close.
+  for (let i = 0; i < 11000; i++) {
     const x = rnd() * size;
     const y = rnd() * size;
-    const len = 2 + rnd() * 5;
+    const len = 3 + rnd() * 7;
     const ang = (rnd() - 0.5) * 0.6 - Math.PI / 2;
-    const hueV = 30 + rnd() * 30;
-    ctx.strokeStyle = `rgba(${hueV + rnd() * 30 | 0}, ${60 + rnd() * 40 | 0}, ${20 + rnd() * 20 | 0}, 0.85)`;
-    ctx.lineWidth = 0.5 + rnd() * 0.8;
+    const hueV = 50 + rnd() * 60;
+    ctx.strokeStyle = `rgba(${hueV | 0}, ${100 + rnd() * 60 | 0}, ${40 + rnd() * 30 | 0}, 0.78)`;
+    ctx.lineWidth = 0.6 + rnd() * 0.9;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
     ctx.stroke();
+  }
+  // Brighter highlight blades — yellow-green specks for sunny pop.
+  for (let i = 0; i < 600; i++) {
+    const x = rnd() * size;
+    const y = rnd() * size;
+    const len = 4 + rnd() * 6;
+    const ang = (rnd() - 0.5) * 0.6 - Math.PI / 2;
+    ctx.strokeStyle = `rgba(${180 + rnd() * 50 | 0}, ${200 + rnd() * 50 | 0}, ${80 + rnd() * 60 | 0}, 0.55)`;
+    ctx.lineWidth = 0.6 + rnd() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    ctx.stroke();
+  }
+  // Tiny wildflower dots — white, yellow, pink.
+  const flowerColors = [
+    "rgba(240,230,210,0.8)",
+    "rgba(255,220,90,0.85)",
+    "rgba(220,160,180,0.7)",
+  ];
+  for (let i = 0; i < 80; i++) {
+    const x = rnd() * size;
+    const y = rnd() * size;
+    ctx.fillStyle = flowerColors[(rnd() * flowerColors.length) | 0];
+    ctx.beginPath();
+    ctx.arc(x, y, 1.2 + rnd() * 1.6, 0, Math.PI * 2);
+    ctx.fill();
   }
   // Mud/bare-earth patches
   for (let i = 0; i < 40; i++) {

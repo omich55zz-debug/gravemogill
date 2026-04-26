@@ -10,6 +10,7 @@ import {
   decorBouquet, decorCandle, decorWreath, decorBible,
   decorBonePile, decorSkull, decorLanternPole, decorStoneUrn,
   decorDirtMound, decorCrossStake, decorPumpkin,
+  decorStoneBench, decorWeepingAngel, decorFountain,
   entityPlayer, entityCat, entityZombie, graveHole,
   tree, grassClump, pond, raven,
 } from "./meshes";
@@ -71,6 +72,11 @@ export class ThreeWorld {
 
   // Extra decorative lights (kept warm for lanterns).
   private torchLights: Array<{ light: THREE.PointLight; phase: number; intensity: number }> = [];
+  // Trees registered for wind sway animation.
+  private swayingTrees: Array<{ obj: THREE.Object3D; phase: number }> = [];
+  // Firefly particle system for nighttime ambient sparkle.
+  private fireflies?: THREE.Points;
+  private firefliesData?: Float32Array; // x,y,z,phase per particle
 
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -230,6 +236,7 @@ export class ThreeWorld {
         t.scale.setScalar(0.85 + rnd() * 0.35);
         t.rotation.y = rnd() * Math.PI * 2;
         this.scene.add(t);
+        this.swayingTrees.push({ obj: t, phase: rnd() * Math.PI * 2 });
         break;
       }
     }
@@ -289,6 +296,9 @@ export class ThreeWorld {
       { make: decorCrossStake,    count: 5, rotate: true  },
       { make: decorPumpkin,       count: 4, rotate: true  },
       { make: decorLanternPole,   count: 6, rotate: false },
+      { make: decorStoneBench,    count: 4, rotate: true  },
+      { make: decorWeepingAngel,  count: 2, rotate: true  },
+      { make: () => decorFountain(1.1), count: 1, rotate: false },
     ];
     for (const spec of decorSpecs) {
       let placed = 0, attempts = 0;
@@ -308,6 +318,8 @@ export class ThreeWorld {
 
     // Mist planes intentionally disabled — user wants a clear sunny scene.
     void cols; void rows;
+    // Build the firefly particle layer (visible at night / overcast).
+    this.buildFireflies();
   }
 
   // ---------------- Mist / fog planes ----------------
@@ -743,6 +755,76 @@ export class ThreeWorld {
     return l;
   }
 
+  /** Apply a small wind sway to all registered trees & grass tufts. */
+  private updateSway(t: number) {
+    const T = t * 0.001;
+    for (const s of this.swayingTrees) {
+      s.obj.rotation.z = Math.sin(T * 0.9 + s.phase) * 0.025;
+      s.obj.rotation.x = Math.cos(T * 0.7 + s.phase) * 0.018;
+    }
+  }
+
+  /** Build a small floating-firefly point cloud over the cemetery. */
+  buildFireflies() {
+    const count = 60;
+    const positions = new Float32Array(count * 3);
+    const data = new Float32Array(count * 4); // x0,z0,phase,radius
+    for (let i = 0; i < count; i++) {
+      const x = (Math.random() - 0.5) * CONFIG.COLS * 0.95;
+      const z = (Math.random() - 0.5) * CONFIG.ROWS * 0.95;
+      const y = 0.6 + Math.random() * 1.6;
+      positions[i * 3 + 0] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      data[i * 4 + 0] = x;
+      data[i * 4 + 1] = z;
+      data[i * 4 + 2] = Math.random() * Math.PI * 2;
+      data[i * 4 + 3] = 0.3 + Math.random() * 0.6;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    // Soft circular sprite for each firefly.
+    const cnv = document.createElement("canvas");
+    cnv.width = 32; cnv.height = 32;
+    const cx = cnv.getContext("2d")!;
+    const grad = cx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, "rgba(255,240,160,1)");
+    grad.addColorStop(0.4, "rgba(255,210,90,0.6)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    cx.fillStyle = grad; cx.fillRect(0, 0, 32, 32);
+    const tex = new THREE.CanvasTexture(cnv);
+    const mat = new THREE.PointsMaterial({
+      size: 0.32, map: tex, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, color: 0xffe89a,
+    });
+    this.fireflies = new THREE.Points(geo, mat);
+    this.firefliesData = data;
+    this.scene.add(this.fireflies);
+  }
+
+  private updateFireflies(t: number) {
+    if (!this.fireflies || !this.firefliesData) return;
+    // Hide fireflies in bright daylight (sunny weather), reveal at night.
+    const visibility = (this.weather === "sunny") ? 0 : (this.weather === "overcast" ? 0.4 : 1);
+    (this.fireflies.material as THREE.PointsMaterial).opacity = visibility;
+    if (visibility <= 0) return;
+    const T = t * 0.001;
+    const pos = (this.fireflies.geometry.getAttribute("position") as THREE.BufferAttribute);
+    const d = this.firefliesData;
+    const arr = pos.array as Float32Array;
+    const count = arr.length / 3;
+    for (let i = 0; i < count; i++) {
+      const x0 = d[i * 4 + 0];
+      const z0 = d[i * 4 + 1];
+      const ph = d[i * 4 + 2];
+      const r = d[i * 4 + 3];
+      arr[i * 3 + 0] = x0 + Math.sin(T * 0.7 + ph) * r;
+      arr[i * 3 + 1] = 0.6 + Math.sin(T * 1.2 + ph * 1.7) * 0.6 + 0.6;
+      arr[i * 3 + 2] = z0 + Math.cos(T * 0.5 + ph * 1.3) * r;
+    }
+    pos.needsUpdate = true;
+  }
+
   private _lastRenderTs = 0;
   render() {
     this.updateCamera();
@@ -753,6 +835,8 @@ export class ThreeWorld {
     this.updateTorches(t);
     this.updateMist(t);
     this.updateRain(dt);
+    this.updateSway(t);
+    this.updateFireflies(t);
     this.renderer.render(this.scene, this.camera);
   }
 

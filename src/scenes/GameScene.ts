@@ -323,12 +323,12 @@ export class GameScene extends Phaser.Scene {
     const at = this._animT;
     if (this.player.mesh3D) {
       const p = this.three.phaserToThree(this.player.x, this.player.y);
-      // Walking speed proxy from stick magnitude (0..1)
       const stickMag = Math.hypot(this.player.stick.x, this.player.stick.y);
-      const walkBob = stickMag > 0.05
+      const walking = stickMag > 0.05;
+      const walkBob = walking
         ? Math.abs(Math.sin(at * 9)) * 0.05
-        : Math.sin(at * 1.6) * 0.018; // gentle idle breathing
-      const sway = stickMag > 0.05
+        : Math.sin(at * 1.6) * 0.018;
+      const sway = walking
         ? Math.sin(at * 9) * 0.04 * stickMag
         : Math.sin(at * 1.4) * 0.012;
       this.player.mesh3D.position.set(p.x, walkBob, p.z);
@@ -336,33 +336,62 @@ export class GameScene extends Phaser.Scene {
       this.player.mesh3D.rotation.z = sway;
       this.player.mesh3D.visible = true;
       this.three.setPlayerYaw(this.player.facingYaw);
+      // Animate sub-parts: arms swing opposite phases, cape lags movement.
+      const parts = (this.player.mesh3D.userData as any).parts;
+      if (parts) {
+        const armSwing = walking ? Math.sin(at * 9) * 0.6 * stickMag : Math.sin(at * 1.4) * 0.05;
+        if (parts.armL) parts.armL.rotation.x = armSwing;
+        if (parts.armR) parts.armR.rotation.x = -armSwing;
+        if (parts.capePivot) {
+          const capeLift = walking ? -0.25 * stickMag - Math.abs(Math.sin(at * 4.5)) * 0.1 : 0;
+          parts.capePivot.rotation.x = capeLift;
+          parts.capePivot.rotation.z = Math.sin(at * 3.2) * 0.05;
+        }
+        // Orb breathes (scale pulse) — magic feel.
+        const pulse = 1 + Math.sin(at * 3.5) * 0.06;
+        if (parts.orb) parts.orb.scale.setScalar(pulse);
+        if (parts.halo) parts.halo.scale.setScalar(1 + Math.sin(at * 2.7) * 0.12);
+      }
     }
     if (this.cat.mesh3D) {
       const c = this.three.phaserToThree(this.cat.sprite.x, this.cat.sprite.y);
-      // Cat: slow chest-rise breathing + occasional tail-twitch yaw wiggle
       const breathe = Math.sin(at * 2.4) * 0.012;
-      const twitch = Math.sin(at * 14) * 0.04 + Math.sin(at * 0.7) * 0.02;
+      const twitch = Math.sin(at * 14) * 0.03;
       this.cat.mesh3D.position.set(c.x, breathe, c.z);
       this.cat.mesh3D.rotation.y = this.cat.facingYaw + twitch;
-      // Slight side-to-side rock when walking
       const dx = c.x - (this._catLastX ?? c.x);
       const dz = c.z - (this._catLastZ ?? c.z);
       const moving = Math.hypot(dx, dz) > 0.001;
       this.cat.mesh3D.rotation.z = moving ? Math.sin(at * 11) * 0.05 : 0;
       this._catLastX = c.x; this._catLastZ = c.z;
+      // Tail wave: each segment lags the previous one for a propagating ripple.
+      const parts = (this.cat.mesh3D.userData as any).parts;
+      if (parts && parts.tailSegments) {
+        const segs: THREE.Group[] = parts.tailSegments;
+        const baseFreq = moving ? 6.5 : 2.3;
+        for (let i = 0; i < segs.length; i++) {
+          segs[i].rotation.y = Math.sin(at * baseFreq - i * 0.6) * 0.35;
+          segs[i].rotation.z = Math.sin(at * baseFreq * 0.7 - i * 0.4) * 0.18;
+        }
+      }
     }
     for (const z of this.zombies) {
       if (!z.mesh3D) continue;
       const zp = this.three.phaserToThree(z.sprite.x, z.sprite.y);
-      // Rise animation: push down into ground during emerge phase.
       const sink = (1 - z.emergePhase) * 1.2;
-      // Eerie sway — different phase per zombie so they look unsynced.
       const phase = (z.sprite.x * 0.07 + z.sprite.y * 0.05);
       const sway = Math.sin(at * 2.6 + phase) * 0.07;
       const lurch = Math.abs(Math.sin(at * 5 + phase)) * 0.04;
       z.mesh3D.position.set(zp.x, -sink + lurch, zp.z);
       z.mesh3D.rotation.y = z.facingYaw;
       z.mesh3D.rotation.z = sway;
+      // Tremor on outstretched hands.
+      const parts = (z.mesh3D.userData as any).parts;
+      if (parts) {
+        const tremor = Math.sin(at * 22 + phase * 3) * 0.18;
+        if (parts.armL) parts.armL.rotation.x = -1.0 + Math.sin(at * 2 + phase) * 0.18 + tremor * 0.15;
+        if (parts.armR) parts.armR.rotation.x = -1.0 + Math.sin(at * 2 + phase + 0.7) * 0.18 + tremor * 0.15;
+      }
     }
     // Center the orbit camera on the player.
     const op = this.three.phaserToThree(this.player.x, this.player.y);

@@ -1393,7 +1393,44 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
     g.add(gem);
   }
 
-  // ------- Staff held to the right -------
+  // ------- Arms (animated): pivot at the shoulder so they swing -------
+  const sleeveMat = new THREE.MeshStandardMaterial({ color: robePrimary, roughness: 0.7 });
+  const handMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.75 });
+  const buildArm = (sign: 1 | -1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sign * 0.28, 1.05, 0);
+    const sleeve = mkMesh(new THREE.CylinderGeometry(0.06, 0.07, 0.5, 8), sleeveMat);
+    sleeve.position.y = -0.25;
+    pivot.add(sleeve);
+    const hand = mkMesh(new THREE.SphereGeometry(0.06, 8, 6), handMat);
+    hand.position.y = -0.52;
+    pivot.add(hand);
+    g.add(pivot);
+    return pivot;
+  };
+  const armL = buildArm(-1);
+  const armR = buildArm(1);
+
+  // ------- Cape attached to the back, swings on movement -------
+  const capePivot = new THREE.Group();
+  capePivot.position.set(0, 1.06, -0.18);
+  const capeMat = new THREE.MeshStandardMaterial({
+    color: robePrimary, roughness: 0.7, side: THREE.DoubleSide,
+  });
+  const capeGeo = new THREE.PlaneGeometry(0.62, 0.95, 1, 4);
+  const cape = mkMesh(capeGeo, capeMat);
+  cape.position.y = -0.4;
+  capePivot.add(cape);
+  // Gold trim along the bottom of the cape (small torus arc)
+  const capeTrim = mkMesh(
+    new THREE.BoxGeometry(0.62, 0.012, 0.02),
+    new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 })
+  );
+  capeTrim.position.y = -0.85;
+  capePivot.add(capeTrim);
+  g.add(capePivot);
+
+  // ------- Staff held to the right (parented to right arm so it swings too) -------
   const staffMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x3a2712, roughness: 0.9 });
   const staff = mkMesh(new THREE.CylinderGeometry(0.025, 0.03, 1.7, 6), staffMat);
   staff.position.set(0.34, 0.85, 0.12);
@@ -1428,6 +1465,9 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
   const halo = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), haloMat);
   halo.position.copy(orb.position);
   g.add(halo);
+
+  // Expose animatable parts so the GameScene update loop can drive them.
+  (g.userData as any).parts = { armL, armR, capePivot, orb, halo };
 
   return g;
 }
@@ -1533,24 +1573,35 @@ export function entityCat(): THREE.Group {
     }
   }
 
-  // Tail (longer, curled up)
-  const tailSegMat = furMat;
-  for (let i = 0; i < 6; i++) {
-    const t = i / 6;
-    const seg = mkMesh(new THREE.SphereGeometry(0.06 - t * 0.015, 8, 6), tailSegMat);
-    seg.position.set(-0.3 - t * 0.08, 0.28 + Math.sin(t * 2.5) * 0.15 + 0.05 * t, 0);
-    g.add(seg);
-    // Occasional dark stripe on tail
+  // ------- Tail (animated) -------
+  // Build the tail as a chain of pivot groups so each segment swings
+  // relative to its parent, producing a believable wave when animated.
+  const tailRoot = new THREE.Group();
+  tailRoot.position.set(-0.3, 0.28, 0);
+  g.add(tailRoot);
+  const tailSegments: THREE.Group[] = [];
+  let parent: THREE.Object3D = tailRoot;
+  const segCount = 6;
+  for (let i = 0; i < segCount; i++) {
+    const t = i / segCount;
+    const segPivot = new THREE.Group();
+    // Step backwards along x and a touch up so the tail curls naturally.
+    if (i > 0) segPivot.position.set(-0.08, 0.025, 0);
+    parent.add(segPivot);
+    const seg = mkMesh(new THREE.SphereGeometry(0.06 - t * 0.015, 8, 6), furMat);
+    segPivot.add(seg);
     if (i === 1 || i === 3 || i === 5) {
       const stripe = mkMesh(
         new THREE.TorusGeometry(0.06 - t * 0.015, 0.01, 4, 8),
         darkStripeMat
       );
       stripe.rotation.y = Math.PI / 2;
-      stripe.position.copy(seg.position);
-      g.add(stripe);
+      segPivot.add(stripe);
     }
+    tailSegments.push(segPivot);
+    parent = segPivot;
   }
+  (g.userData as any).parts = { tailSegments, tailRoot };
 
   // Legs
   const legGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.18, 6);
@@ -1587,16 +1638,26 @@ export function entityZombie(variant: "normal" | "skinny" | "fat" | "headless" =
   const body = mkMesh(new THREE.BoxGeometry(bodyW, bodyH, 0.25), ragMat);
   body.position.y = 0.4 + bodyH / 2;
   g.add(body);
-  // Arms
+  // Arms — outstretched zombie reach, with pivot at shoulder so they
+  // tremble/twitch in the update loop.
   const armGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
-  const aL = mkMesh(armGeo, ragMat);
-  aL.position.set(-bodyW / 2 - 0.05, 0.65, 0.15);
-  aL.rotation.x = -0.6;
-  g.add(aL);
-  const aR = mkMesh(armGeo, ragMat);
-  aR.position.set(bodyW / 2 + 0.05, 0.65, 0.15);
-  aR.rotation.x = -0.6;
-  g.add(aR);
+  const handMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95 });
+  const buildZombieArm = (sign: 1 | -1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sign * (bodyW / 2 + 0.05), 0.4 + bodyH - 0.05, 0.05);
+    const arm = mkMesh(armGeo, ragMat);
+    arm.position.y = -0.25;
+    pivot.add(arm);
+    // bony hand
+    const hand = mkMesh(new THREE.BoxGeometry(0.11, 0.08, 0.11), handMat);
+    hand.position.y = -0.52;
+    pivot.add(hand);
+    pivot.rotation.x = -1.0; // outstretched forward
+    g.add(pivot);
+    return pivot;
+  };
+  const armL = buildZombieArm(-1);
+  const armR = buildZombieArm(1);
   // Head
   if (variant !== "headless") {
     const head = mkMesh(new THREE.SphereGeometry(0.16, 10, 8), skinMat);
@@ -1612,6 +1673,7 @@ export function entityZombie(variant: "normal" | "skinny" | "fat" | "headless" =
     eR.position.set(0.06, 0.4 + bodyH + 0.2, 0.14);
     g.add(eR);
   }
+  (g.userData as any).parts = { armL, armR };
   return g;
 }
 
@@ -1732,6 +1794,144 @@ export function grassClump(): THREE.Group {
     blade.rotation.y = Math.random() * Math.PI;
     g.add(blade);
   }
+  return g;
+}
+
+// ---------------- Stone bench ----------------
+/** Carved stone bench with a moss line and weathered legs. */
+export function decorStoneBench(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    map: roughStoneTexture(), color: 0x9a9286, roughness: 0.92,
+  });
+  const seat = mkMesh(new THREE.BoxGeometry(1.4, 0.12, 0.42), mat);
+  seat.position.y = 0.45;
+  g.add(seat);
+  // Legs
+  for (const x of [-0.55, 0.55]) {
+    const leg = mkMesh(new THREE.BoxGeometry(0.18, 0.45, 0.36), mat);
+    leg.position.set(x, 0.225, 0);
+    g.add(leg);
+  }
+  // Mossy line on the front lip
+  const moss = mkMesh(
+    new THREE.BoxGeometry(1.42, 0.04, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x3a5a26, roughness: 0.95 }),
+  );
+  moss.position.set(0, 0.4, 0.21);
+  g.add(moss);
+  return g;
+}
+
+// ---------------- Weeping angel statue ----------------
+/**
+ * Sorrowful angel atop a stepped pedestal — head bowed, hands cupped to
+ * face. Simple silhouette built from primitives.
+ */
+export function decorWeepingAngel(): THREE.Group {
+  const g = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({
+    map: marbleTexture(), color: 0xc5beae, roughness: 0.6, metalness: 0.05,
+  });
+  const baseMat = new THREE.MeshStandardMaterial({
+    map: graniteTexture(), color: 0x6c655c, roughness: 0.9,
+  });
+  // Stepped pedestal
+  const base1 = mkMesh(new THREE.BoxGeometry(0.95, 0.18, 0.95), baseMat);
+  base1.position.y = 0.09;
+  g.add(base1);
+  const base2 = mkMesh(new THREE.BoxGeometry(0.78, 0.16, 0.78), baseMat);
+  base2.position.y = 0.26;
+  g.add(base2);
+  const plinth = mkMesh(new THREE.CylinderGeometry(0.28, 0.32, 0.28, 12), baseMat);
+  plinth.position.y = 0.48;
+  g.add(plinth);
+  // Robed body — narrower at top, wide at base
+  const body = mkMesh(new THREE.CylinderGeometry(0.22, 0.36, 1.05, 12), stoneMat);
+  body.position.y = 1.15;
+  g.add(body);
+  // Head bowed slightly forward
+  const head = mkMesh(new THREE.SphereGeometry(0.16, 12, 10), stoneMat);
+  head.position.set(0, 1.78, 0.05);
+  g.add(head);
+  // Hair shroud
+  const hair = mkMesh(new THREE.SphereGeometry(0.18, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), stoneMat);
+  hair.position.set(0, 1.84, 0.02);
+  g.add(hair);
+  // Hands cupped to face — two small spheres
+  for (const sx of [-1, 1]) {
+    const hand = mkMesh(new THREE.SphereGeometry(0.07, 8, 6), stoneMat);
+    hand.position.set(sx * 0.08, 1.66, 0.18);
+    g.add(hand);
+    // Forearm
+    const forearm = mkMesh(new THREE.CylinderGeometry(0.06, 0.06, 0.42, 6), stoneMat);
+    forearm.position.set(sx * 0.13, 1.45, 0.13);
+    forearm.rotation.x = -0.6;
+    forearm.rotation.z = sx * 0.2;
+    g.add(forearm);
+  }
+  // Wings — folded back
+  const wingMat = stoneMat;
+  for (const sx of [-1, 1]) {
+    const wing = mkMesh(new THREE.BoxGeometry(0.06, 0.95, 0.5), wingMat);
+    wing.position.set(sx * 0.18, 1.35, -0.18);
+    wing.rotation.y = sx * 0.5;
+    g.add(wing);
+    // Feather plume row
+    for (let i = 0; i < 4; i++) {
+      const f = mkMesh(new THREE.BoxGeometry(0.04, 0.18, 0.08), wingMat);
+      f.position.set(sx * 0.22, 1.0 + i * 0.18, -0.15 - sx * 0.05);
+      f.rotation.y = sx * 0.6;
+      g.add(f);
+    }
+  }
+  return g;
+}
+
+// ---------------- Cemetery fountain ----------------
+/** Tiered stone fountain with glowing water disc — animated by the renderer. */
+export function decorFountain(radius = 1.2): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    map: roughStoneTexture(), color: 0xa39c8e, roughness: 0.9,
+  });
+  // Outer rim
+  const rim = mkMesh(new THREE.TorusGeometry(radius, 0.18, 8, 24), mat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.2;
+  g.add(rim);
+  const wall = mkMesh(new THREE.CylinderGeometry(radius, radius, 0.42, 24, 1, true), mat);
+  wall.position.y = 0.21;
+  g.add(wall);
+  // Water disc
+  const waterMat2 = new THREE.MeshStandardMaterial({
+    color: 0x6fb6c8, emissive: 0x205060, emissiveIntensity: 0.4,
+    roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85,
+  });
+  const water = mkMesh(new THREE.CircleGeometry(radius - 0.05, 32), waterMat2);
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.4;
+  g.add(water);
+  // Center column
+  const col = mkMesh(new THREE.CylinderGeometry(0.18, 0.22, 0.5, 12), mat);
+  col.position.y = 0.65;
+  g.add(col);
+  const bowl = mkMesh(new THREE.CylinderGeometry(0.42, 0.18, 0.18, 12), mat);
+  bowl.position.y = 0.95;
+  g.add(bowl);
+  // Tiny upper spout
+  const spout = mkMesh(new THREE.CylinderGeometry(0.05, 0.06, 0.18, 8), mat);
+  spout.position.y = 1.13;
+  g.add(spout);
+  // Glowing droplet on top — animated by tagging
+  const dropMat = new THREE.MeshStandardMaterial({
+    color: 0xa0e8ff, emissive: 0x60c0e0, emissiveIntensity: 1.4,
+    transparent: true, opacity: 0.9,
+  });
+  const drop = mkMesh(new THREE.SphereGeometry(0.06, 10, 8), dropMat);
+  drop.position.y = 1.28;
+  g.add(drop);
+  (g.userData as any).parts = { drop, water };
   return g;
 }
 
