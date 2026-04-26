@@ -1249,6 +1249,27 @@ export class GameScene extends Phaser.Scene {
     // Keyboard Q/R rotate yaw for a bit of free look.
     this.input.keyboard?.on("keydown-Q", () => this.three.rotateBy(-0.12, 0));
     this.input.keyboard?.on("keydown-R", () => this.three.rotateBy(0.12, 0));
+
+    // Keyboard +/-/= for zoom — works on any layout. NUMPAD_ADD and
+    // NUMPAD_SUBTRACT cover number-pad users; PLUS / MINUS / EQUALS cover
+    // the main row.
+    const kb = this.input.keyboard;
+    if (kb) {
+      const onPlus  = () => { if (!this.uiModalOpen) this.zoomIn(); };
+      const onMinus = () => { if (!this.uiModalOpen) this.zoomOut(); };
+      kb.on("keydown-PLUS", onPlus);
+      kb.on("keydown-EQUALS", onPlus);
+      kb.on("keydown-NUMPAD_ADD", onPlus);
+      kb.on("keydown-MINUS", onMinus);
+      kb.on("keydown-NUMPAD_SUBTRACT", onMinus);
+      // Browser may emit "Equal" / "Minus" via key events; also catch raw
+      // KeyboardEvent codes that Phaser might not map to the constants.
+      this.input.keyboard?.addListener("keydown", (e: KeyboardEvent) => {
+        if (this.uiModalOpen) return;
+        if (e.key === "+" || e.key === "=") this.zoomIn();
+        else if (e.key === "-" || e.key === "_") this.zoomOut();
+      });
+    }
   }
 }
 
