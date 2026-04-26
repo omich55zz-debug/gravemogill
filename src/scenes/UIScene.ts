@@ -13,6 +13,7 @@ import { progress, ACHIEVEMENTS } from "../systems/Progress";
 import { WEATHER_NAME_RU, WEATHER_ICON } from "../systems/Weather";
 import { reputation } from "../systems/Reputation";
 import { THEMES } from "../data/graveThemes";
+import { tiersFor } from "../systems/Buildings";
 import { i18n } from "../systems/I18n";
 
 /**
@@ -36,6 +37,9 @@ export class UIScene extends Phaser.Scene {
   private stickActive = false;
   private stickPointerId?: number;
   private actionBtn!: Phaser.GameObjects.Container;
+  private upgradeBtn?: Phaser.GameObjects.Container;
+  private upgradeBtnLabel?: Phaser.GameObjects.Text;
+  private upgradeBtnSub?: Phaser.GameObjects.Text;
 
   constructor() { super({ key: "UI", active: false }); }
 
@@ -104,6 +108,7 @@ export class UIScene extends Phaser.Scene {
     // Bottom controls: virtual stick + action button
     this.createVirtualStick();
     this.createActionButton();
+    this.createUpgradeButton();
 
     // Orders button (opens list of offered orders)
     this.createOrdersButton();
@@ -126,7 +131,7 @@ export class UIScene extends Phaser.Scene {
     this.orders.on("completed", () => this.refreshActiveOrders());
     this.orders.on("failed", () => this.refreshActiveOrders());
 
-    this.game_.events.on("state", () => this.refreshActionHint());
+    this.game_.events.on("state", () => { this.refreshActionHint(); this.refreshUpgradeButton(); });
 
     // Context menu requested by GameScene
     this.events.on("openContext", (cell: Cell) => this.openContextMenu(cell));
@@ -289,6 +294,7 @@ export class UIScene extends Phaser.Scene {
     this.stickKnob.setPosition(90, height - 90);
 
     this.actionBtn.setPosition(width - 90, height - 90);
+    this.upgradeBtn?.setPosition(width - 200, height - 90);
   }
 
   // -------------- Virtual stick --------------
@@ -346,6 +352,45 @@ export class UIScene extends Phaser.Scene {
     this.actionBtn.add([bg, label]);
     bg.setInteractive({ useHandCursor: true });
     bg.on("pointerup", () => this.game_.triggerAction());
+  }
+
+  // -------------- Upgrade building button --------------
+
+  private createUpgradeButton() {
+    const { width, height } = this.scale;
+    this.upgradeBtn = this.add.container(width - 200, height - 90);
+    const bg = this.add.rectangle(0, 0, 116, 60, 0x251a2c, 0.95)
+      .setStrokeStyle(2, 0xc9a14a, 0.9);
+    this.upgradeBtnLabel = this.add.text(0, -10, "✦ Улучшить", {
+      fontFamily: "serif", fontSize: "13px", color: "#f5e7bc", fontStyle: "bold",
+    }).setOrigin(0.5);
+    this.upgradeBtnSub = this.add.text(0, 10, "1200₽", {
+      fontFamily: "serif", fontSize: "12px", color: "#d8c890",
+    }).setOrigin(0.5);
+    this.upgradeBtn.add([bg, this.upgradeBtnLabel, this.upgradeBtnSub]);
+    this.upgradeBtn.setVisible(false);
+    bg.setInteractive({ useHandCursor: true });
+    bg.on("pointerup", () => {
+      const slot = this.game_.nearbyBuilding;
+      if (slot) this.game_.upgradeBuilding(slot);
+    });
+    this.scale.on("resize", () => this.layoutResponsive());
+  }
+
+  /** Refresh upgrade button visibility/cost based on player proximity. */
+  private refreshUpgradeButton() {
+    const slot = this.game_?.nearbyBuilding;
+    if (!this.upgradeBtn) return;
+    if (!slot || slot.tier >= 3) {
+      this.upgradeBtn.setVisible(false);
+      return;
+    }
+    const next = (slot.tier + 1) as 2 | 3;
+    const spec = tiersFor(slot.kind)[next];
+    this.upgradeBtnLabel?.setText(`✦ ${spec.name}`);
+    const can = this.economy.money >= spec.cost;
+    this.upgradeBtnSub?.setText(`${spec.cost}₽`).setColor(can ? "#d8c890" : "#e09080");
+    this.upgradeBtn.setVisible(true);
   }
 
   // -------------- Orders button --------------

@@ -5,6 +5,7 @@ import {
   tombStone, tombObelisk, tombCross, tombMarble, tombAngel,
   tombCeltic, tombWood, tombSarco, tombBroken,
   buildingMausoleum, buildingChapel, buildingCrypt, buildingBigCross, buildingGate,
+  buildingChapelGrand, buildingCathedral, buildingCryptOrnate, buildingMausoleumGrand,
   flower, fenceWood, fenceIron, fenceStone,
   decorBouquet, decorCandle, decorWreath, decorBible,
   decorBonePile, decorSkull, decorLanternPole, decorStoneUrn,
@@ -760,11 +761,15 @@ export class ThreeWorld {
       case "tomb_sarco":   return tombSarco();
       case "tomb_broken":  return tombBroken();
       // Buildings
-      case "build_mausoleum": return buildingMausoleum();
-      case "build_chapel":    return buildingChapel();
-      case "build_crypt":     return buildingCrypt();
-      case "build_bigcross":  return buildingBigCross();
-      case "build_gate":      return buildingGate();
+      case "build_mausoleum":         return buildingMausoleum();
+      case "build_chapel":            return buildingChapel();
+      case "build_chapel_grand":      return buildingChapelGrand();
+      case "build_cathedral":         return buildingCathedral();
+      case "build_crypt":             return buildingCrypt();
+      case "build_crypt_ornate":      return buildingCryptOrnate();
+      case "build_mausoleum_grand":   return buildingMausoleumGrand();
+      case "build_bigcross":          return buildingBigCross();
+      case "build_gate":              return buildingGate();
       // Flowers (hex colors chosen to match pixel-art Phaser equivalents)
       case "flower_white":   return flower(0xd8d4c8);
       case "flower_yellow":  return flower(0xf4c240);

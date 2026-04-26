@@ -14,6 +14,8 @@ import type { TimeSystem } from "./TimeSystem";
 import { OrderSystem, type Order } from "./OrderSystem";
 import type { Grid } from "../utils/grid";
 import { reputation } from "./Reputation";
+import { buildings } from "./Buildings";
+import type { BuildingTier } from "./Buildings";
 
 const KEY = "gravemogill.save.v1";
 
@@ -45,6 +47,7 @@ interface SaveData {
   active: Order[];
   history: Order[];
   reputation?: number;
+  buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
 }
 
 export function hasSave(): boolean {
@@ -102,6 +105,7 @@ export function saveGame(state: {
       active: state.orders.active,
       history: state.orders.history,
       reputation: reputation.points,
+      buildings: buildings.toJSON(),
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
@@ -137,6 +141,7 @@ export interface LoadResult {
   playerY?: number;
   savedAtMs: number;
   reputation?: number;
+  buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
 }
 
 export function loadIntoLoadResult(): LoadResult | null {

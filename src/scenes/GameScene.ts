@@ -13,6 +13,7 @@ import { progress } from "../systems/Progress";
 import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
 import { reputation } from "../systems/Reputation";
+import { buildings, tiersFor, type BuildingKind, type BuildingSlot } from "../systems/Buildings";
 import { Weather, pickWeather, type WeatherKind } from "../systems/Weather";
 import { shop } from "../systems/Shop";
 import { ThreeWorld } from "../three/ThreeWorld";
@@ -56,10 +57,14 @@ export class GameScene extends Phaser.Scene {
   // 3D world renderer. Owns the THREE scene / camera / meshes.
   three!: ThreeWorld;
   private propMeshes: THREE.Object3D[] = [];
+  /** Mesh tracking for upgradable buildings, keyed by `${col},${row}`. */
+  private buildingMeshes = new Map<string, THREE.Object3D>();
 
   // Highlight for the "focused" tile in front of the player
   focusRect!: Phaser.GameObjects.Graphics;
   focusedCell?: Cell;
+  /** Building slot the player is currently standing close to (within 2 tiles). */
+  nearbyBuilding?: BuildingSlot;
 
   // Input state
   keys = { up: false, down: false, left: false, right: false };
@@ -380,6 +385,8 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.three.setFocus(0, 0, false);
     }
+    // Track nearest upgradable building (within 3 tiles, manhattan-ish).
+    this.nearbyBuilding = buildings.findNear(col, row, 3);
 
     // Depth sorting by y for nice overlap
     this.player.sprite.setDepth(this.player.y);
@@ -692,6 +699,65 @@ export class GameScene extends Phaser.Scene {
       this.economy.earn(gain);
       this.showFloatText(`Доход от дорожек +${gain}₽`, this.player.x, this.player.y - 20, "#a8e3a8");
     }
+    // Daily passive income from upgraded chapels / crypts.
+    const buildingGain = buildings.totalDailyIncome();
+    if (buildingGain > 0) {
+      this.economy.earn(buildingGain);
+      this.showFloatText(`Здания приносят +${buildingGain}₽`, this.player.x, this.player.y - 36, "#d8c890");
+    }
+  }
+
+  /** Attempt to upgrade a building slot. Spends gold, swaps mesh in 3D. */
+  upgradeBuilding(slot: BuildingSlot) {
+    const cur = slot.tier;
+    if (cur >= 3) {
+      this.showFloatText("Уже максимум!", this.player.x, this.player.y - 20, "#e0a070");
+      return;
+    }
+    const next = (cur + 1) as 2 | 3;
+    const spec = tiersFor(slot.kind)[next];
+    if (this.economy.money < spec.cost) {
+      this.showFloatText(`Нужно ${spec.cost}₽`, this.player.x, this.player.y - 20, "#ff7070");
+      audio.play("fail");
+      return;
+    }
+    this.economy.earn(-spec.cost);
+    audio.play("coin");
+    const result = buildings.upgrade(slot);
+    if (!result.success) return;
+    // Swap the 3D mesh.
+    const key = `${slot.col},${slot.row}`;
+    const oldMesh = this.buildingMeshes.get(key);
+    if (oldMesh) {
+      this.three.removeMesh(oldMesh);
+      this.propMeshes = this.propMeshes.filter(m => m !== oldMesh);
+    }
+    const newMesh = this.three.addProp(spec.meshKey, slot.col, slot.row);
+    if (newMesh) {
+      this.buildingMeshes.set(key, newMesh);
+      this.propMeshes.push(newMesh);
+    }
+    this.showFloatText(`${spec.name}!`, this.player.x, this.player.y - 24, "#f5e7bc");
+    this.events.emit("buildingUpgraded", slot);
+  }
+
+  /** Refresh meshes from current building tiers (used after loading a save). */
+  private refreshBuildingMeshes() {
+    for (const slot of buildings.slots) {
+      if (slot.tier === 1) continue;
+      const spec = tiersFor(slot.kind)[slot.tier];
+      const key = `${slot.col},${slot.row}`;
+      const oldMesh = this.buildingMeshes.get(key);
+      if (oldMesh) {
+        this.three.removeMesh(oldMesh);
+        this.propMeshes = this.propMeshes.filter(m => m !== oldMesh);
+      }
+      const newMesh = this.three.addProp(spec.meshKey, slot.col, slot.row);
+      if (newMesh) {
+        this.buildingMeshes.set(key, newMesh);
+        this.propMeshes.push(newMesh);
+      }
+    }
   }
 
   tryUnlock(id: string) {
@@ -818,6 +884,11 @@ export class GameScene extends Phaser.Scene {
     if (typeof s.reputation === "number") {
       reputation.load({ points: s.reputation });
     }
+    // Building tiers
+    if (s.buildings) {
+      buildings.load(s.buildings);
+      this.refreshBuildingMeshes();
+    }
     // Restore player position if available.
     if (typeof s.playerX === "number" && typeof s.playerY === "number") {
       this.player.sprite.x = s.playerX;
@@ -859,10 +930,19 @@ export class GameScene extends Phaser.Scene {
       return img;
     };
 
+    // Helper: register an upgradable building and store its mesh by tile.
+    const placeBuilding = (kind: BuildingKind, key: string, col: number, row: number) => {
+      const img = place(key, col, row, 1);
+      buildings.register(kind, col, row, 1);
+      const mesh = this.propMeshes[this.propMeshes.length - 1];
+      if (mesh) this.buildingMeshes.set(`${col},${row}`, mesh);
+      return img;
+    };
+
     // Entrance gate at top-centre, flanking the central aisle.
     place("build_gate", 19, 2, 1);
-    // Chapel at top-left plaza.
-    place("build_chapel", 6, 5, 1);
+    // Chapel at top-left plaza (upgradable).
+    placeBuilding("chapel", "build_chapel", 6, 5);
     // Mausoleums — two on left field, two on right field, symmetric.
     place("build_mausoleum", 12, 6, 1);
     place("build_mausoleum", 28, 6, 1);
@@ -870,11 +950,11 @@ export class GameScene extends Phaser.Scene {
     place("build_mausoleum", 36, 17, 1);
     // Big memorial cross at the cross-aisle intersection, slightly off-centre.
     place("build_bigcross", 19, 15, 1);
-    // Small crypts scattered in the lower necropolis.
-    place("build_crypt", 8, 24, 1);
-    place("build_crypt", 15, 25, 1);
-    place("build_crypt", 24, 24, 1);
-    place("build_crypt", 32, 25, 1);
+    // Small crypts scattered in the lower necropolis (upgradable).
+    placeBuilding("crypt", "build_crypt",  8, 24);
+    placeBuilding("crypt", "build_crypt", 15, 25);
+    placeBuilding("crypt", "build_crypt", 24, 24);
+    placeBuilding("crypt", "build_crypt", 32, 25);
 
     // Decorative pre-placed tombstones scattered across open plots so the
     // cemetery looks lived-in from the start. These are NOT interactive

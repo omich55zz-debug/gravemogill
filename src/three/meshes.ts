@@ -401,6 +401,131 @@ export function buildingChapel(): THREE.Group {
   return g;
 }
 
+/**
+ * Tier-2 chapel — taller bell tower, second small spire, more candles inside.
+ * Same footprint as the base chapel so it visually replaces it cleanly.
+ */
+export function buildingChapelGrand(): THREE.Group {
+  const g = buildingChapel();
+  // Add a second smaller front spire on the right side of the nave
+  const spire = mkMesh(new THREE.ConeGeometry(0.55, 1.6, 6), roofSlate);
+  spire.position.set(1.55, 4.4, 0);
+  g.add(spire);
+  const spireBase = mkMesh(new THREE.BoxGeometry(0.7, 0.9, 0.7), stoneA);
+  spireBase.position.set(1.55, 3.55, 0);
+  g.add(spireBase);
+  const spireTip = mkMesh(new THREE.SphereGeometry(0.08, 8, 6), brass);
+  spireTip.position.set(1.55, 5.25, 0);
+  g.add(spireTip);
+  // Additional flying buttresses (decorative)
+  for (const xOff of [-2.4, 2.4]) {
+    const but = mkMesh(new THREE.BoxGeometry(0.25, 1.6, 0.5), stoneA);
+    but.position.set(xOff, 1.0, 0);
+    g.add(but);
+  }
+  // Extra interior glow
+  const grandGlow = new THREE.PointLight(0xffc070, 1.2, 6, 1.5);
+  grandGlow.position.set(0, 3.0, 0);
+  g.add(grandGlow);
+  return g;
+}
+
+/**
+ * Tier-3 cathedral — replaces the chapel with a much taller spire, twin towers,
+ * and rich golden trim. Visually distinct from a distance.
+ */
+export function buildingCathedral(): THREE.Group {
+  const g = new THREE.Group();
+  // Wide stone plinth
+  const plinth = mkMesh(new THREE.BoxGeometry(5.2, 0.5, 4.0), stoneB);
+  plinth.position.y = 0.25;
+  g.add(plinth);
+  // Tall central nave
+  const nave = mkMesh(new THREE.BoxGeometry(4.4, 4.2, 3.4), stoneA);
+  nave.position.y = 2.6;
+  g.add(nave);
+  // Steep gable roof
+  const prism = new THREE.Shape();
+  prism.moveTo(-2.4, 0); prism.lineTo(2.4, 0);
+  prism.lineTo(0, 2.0); prism.lineTo(-2.4, 0);
+  const roof = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(prism, { depth: 3.6, bevelEnabled: false }),
+    stoneDark
+  );
+  roof.rotation.y = Math.PI / 2;
+  roof.position.set(1.8, 4.7, 0);
+  roof.castShadow = roof.receiveShadow = true;
+  g.add(roof);
+  // Gold ridge along the apex
+  const ridge = mkMesh(new THREE.BoxGeometry(0.08, 0.08, 3.6), brass);
+  ridge.position.set(0, 6.7, 0);
+  g.add(ridge);
+
+  // Twin bell towers, taller than the chapel
+  const twinXs = [-2.4, 2.4];
+  const stainedMap = stainedGlassTexture();
+  for (const tx of twinXs) {
+    const tower = mkMesh(new THREE.BoxGeometry(1.4, 5.4, 1.4), stoneA);
+    tower.position.set(tx, 3.0, 0);
+    g.add(tower);
+    const cap = mkMesh(new THREE.ConeGeometry(1.05, 2.2, 4), roofSlate);
+    cap.position.set(tx, 6.7, 0);
+    cap.rotation.y = Math.PI / 4;
+    g.add(cap);
+    const finial = mkMesh(new THREE.SphereGeometry(0.12, 8, 6), brass);
+    finial.position.set(tx, 7.85, 0);
+    g.add(finial);
+    const cV = mkMesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), brass);
+    cV.position.set(tx, 8.25, 0); g.add(cV);
+    const cH = mkMesh(new THREE.BoxGeometry(0.5, 0.12, 0.12), brass);
+    cH.position.set(tx, 8.3, 0); g.add(cH);
+    // Stained-glass window on each tower facing forward
+    const win = mkMesh(new THREE.PlaneGeometry(0.6, 1.4), new THREE.MeshStandardMaterial({
+      map: stainedMap, emissive: 0xffffff, emissiveMap: stainedMap,
+      emissiveIntensity: 1.5, roughness: 0.3, side: THREE.DoubleSide,
+    }));
+    win.position.set(tx, 4.0, 1.71);
+    g.add(win);
+  }
+
+  // Massive central rose window (bigger than chapel's)
+  const rose = mkMesh(new THREE.TorusGeometry(0.85, 0.1, 6, 24), brass);
+  rose.position.set(0, 3.4, 1.72);
+  rose.rotation.x = Math.PI / 2;
+  g.add(rose);
+  const roseInner = mkMesh(new THREE.CircleGeometry(0.82, 28), new THREE.MeshStandardMaterial({
+    map: stainedMap, emissive: 0xffffff, emissiveMap: stainedMap,
+    emissiveIntensity: 1.8, roughness: 0.25, side: THREE.DoubleSide,
+  }));
+  roseInner.position.set(0, 3.4, 1.73);
+  g.add(roseInner);
+  // Cross above rose window
+  const xV = mkMesh(new THREE.BoxGeometry(0.12, 0.55, 0.12), brass);
+  xV.position.set(0, 4.6, 1.73); g.add(xV);
+  const xH = mkMesh(new THREE.BoxGeometry(0.4, 0.12, 0.12), brass);
+  xH.position.set(0, 4.65, 1.73); g.add(xH);
+
+  // Heavy wooden double doors
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x2a1208, roughness: 0.85 });
+  for (const dx of [-0.42, 0.42]) {
+    const door = mkMesh(new THREE.BoxGeometry(0.78, 2.3, 0.12), doorMat);
+    door.position.set(dx, 1.6, 1.72);
+    g.add(door);
+  }
+  const arch = mkMesh(new THREE.TorusGeometry(0.85, 0.08, 6, 16, Math.PI), brass);
+  arch.position.set(0, 2.7, 1.74);
+  arch.rotation.x = -Math.PI / 2;
+  g.add(arch);
+
+  // Two strong warm lights inside
+  const innerA = new THREE.PointLight(0xffb060, 2.0, 9, 1.4);
+  innerA.position.set(0, 3.5, 0); g.add(innerA);
+  const innerB = new THREE.PointLight(0xffc080, 1.0, 5, 1.6);
+  innerB.position.set(0, 1.8, 1.6); g.add(innerB);
+
+  return g;
+}
+
 export function buildingCrypt(): THREE.Group {
   const g = new THREE.Group();
   const plinth = mkMesh(new THREE.BoxGeometry(2.0, 0.25, 1.6), stoneB);
@@ -415,6 +540,95 @@ export function buildingCrypt(): THREE.Group {
   const door = mkMesh(new THREE.BoxGeometry(0.55, 0.9, 0.08), new THREE.MeshStandardMaterial({ color: 0x261a12, roughness: 0.9 }));
   door.position.set(0, 0.7, 0.67);
   g.add(door);
+  return g;
+}
+
+/**
+ * Tier-2 crypt — adds shoulder pillars, bigger plinth, glowing rune above door.
+ */
+export function buildingCryptOrnate(): THREE.Group {
+  const g = buildingCrypt();
+  // Two flanking pillars on the front
+  for (const xOff of [-1.2, 1.2]) {
+    const col = mkMesh(new THREE.CylinderGeometry(0.18, 0.2, 1.7, 10), stoneA);
+    col.position.set(xOff, 0.9, 0.5);
+    g.add(col);
+    const cap = mkMesh(new THREE.BoxGeometry(0.5, 0.1, 0.5), stoneB);
+    cap.position.set(xOff, 1.8, 0.5);
+    g.add(cap);
+  }
+  // Wider stepped plinth
+  const step = mkMesh(new THREE.BoxGeometry(2.4, 0.18, 1.95), stoneB);
+  step.position.y = 0.09;
+  g.add(step);
+  // Rune plaque above the door
+  const runeTex = runesEmissiveTexture();
+  const runes = mkMesh(new THREE.PlaneGeometry(0.75, 0.3), new THREE.MeshStandardMaterial({
+    map: runeTex, emissive: 0xffffff, emissiveMap: runeTex,
+    emissiveIntensity: 1.4, transparent: true, roughness: 0.5,
+  }));
+  runes.position.set(0, 1.4, 0.68);
+  g.add(runes);
+  return g;
+}
+
+/**
+ * Tier-3 crypt — full mausoleum: tall colonnade, dome roof, glowing arches.
+ */
+export function buildingMausoleumGrand(): THREE.Group {
+  const g = new THREE.Group();
+  // Wide stepped plinth
+  const step1 = mkMesh(new THREE.BoxGeometry(3.4, 0.2, 2.6), stoneB);
+  step1.position.y = 0.1; g.add(step1);
+  const step2 = mkMesh(new THREE.BoxGeometry(3.0, 0.2, 2.2), stoneA);
+  step2.position.y = 0.3; g.add(step2);
+  // Main body
+  const body = mkMesh(new THREE.BoxGeometry(2.6, 1.9, 1.9), stoneA);
+  body.position.y = 1.35;
+  g.add(body);
+  // Cornice
+  const cornice = mkMesh(new THREE.BoxGeometry(2.9, 0.18, 2.1), stoneB);
+  cornice.position.y = 2.4; g.add(cornice);
+  // Dome roof
+  const dome = mkMesh(new THREE.SphereGeometry(0.95, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), stoneDark);
+  dome.position.y = 2.5;
+  g.add(dome);
+  const domeRing = mkMesh(new THREE.TorusGeometry(0.95, 0.05, 6, 18), brass);
+  domeRing.rotation.x = Math.PI / 2;
+  domeRing.position.y = 2.5;
+  g.add(domeRing);
+  // Cross atop the dome
+  const cV = mkMesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), brass);
+  cV.position.y = 3.65; g.add(cV);
+  const cH = mkMesh(new THREE.BoxGeometry(0.32, 0.1, 0.1), brass);
+  cH.position.y = 3.7; g.add(cH);
+  // Front colonnade — 4 columns
+  for (const xOff of [-1.05, -0.35, 0.35, 1.05]) {
+    const col = mkMesh(new THREE.CylinderGeometry(0.12, 0.13, 1.85, 10), stoneA);
+    col.position.set(xOff, 1.225, 1.05);
+    g.add(col);
+    const cap = mkMesh(new THREE.BoxGeometry(0.32, 0.08, 0.32), stoneB);
+    cap.position.set(xOff, 2.2, 1.05);
+    g.add(cap);
+  }
+  // Heavy double doors
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.85 });
+  for (const dx of [-0.3, 0.3]) {
+    const door = mkMesh(new THREE.BoxGeometry(0.55, 1.3, 0.08), doorMat);
+    door.position.set(dx, 1.05, 0.96);
+    g.add(door);
+  }
+  // Rune plaque above doors
+  const runeTex = runesEmissiveTexture();
+  const runes = mkMesh(new THREE.PlaneGeometry(1.2, 0.34), new THREE.MeshStandardMaterial({
+    map: runeTex, emissive: 0xffffff, emissiveMap: runeTex,
+    emissiveIntensity: 1.6, transparent: true, roughness: 0.5,
+  }));
+  runes.position.set(0, 1.95, 0.97);
+  g.add(runes);
+  // Interior glow
+  const glow = new THREE.PointLight(0xa8c6ff, 1.0, 5, 1.5);
+  glow.position.set(0, 1.6, 0); g.add(glow);
   return g;
 }
 

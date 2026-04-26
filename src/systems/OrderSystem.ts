@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { generatePerson } from "../data/names";
 import { reputation } from "./Reputation";
 import { pickTheme, THEMES, matchesTheme, type ThemeId, type PlacedGrave } from "../data/graveThemes";
+import { buildings } from "./Buildings";
 
 export type OrderTier = "modest" | "decent" | "lavish";
 
@@ -133,6 +134,11 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
         reputation.awardSpecialGrave(order.theme);
       }
     }
+    // Building bonus: aggregated payout boost from upgraded chapel/crypts.
+    const buildingBoost = buildings.aggregatePayoutBonus();
+    if (buildingBoost > 0 && verdict !== "late") {
+      payout = Math.floor(payout * (1 + buildingBoost));
+    }
     // Reputation rank gives a flat payout multiplier on perfect / under / over.
     if (verdict !== "late") {
       payout = Math.floor(payout * reputation.multiplier());
@@ -144,6 +150,11 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
     if (verdict === "perfect") reputation.awardCompleted(2);
     else if (verdict === "under" || verdict === "over") reputation.awardCompleted(1);
     else reputation.penalizeFailed(1); // "late"
+    // Building bonus: extra reputation from upgraded chapel/crypts.
+    const buildingRep = buildings.aggregateRepBonus();
+    if (buildingRep > 0 && verdict !== "late") {
+      reputation.awardCompleted(buildingRep);
+    }
     this.emit("completed", { order, payout, verdict, themeBonus });
     return { payout, verdict, themeBonus };
   }
