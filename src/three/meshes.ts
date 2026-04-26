@@ -1018,8 +1018,25 @@ export function decorPumpkin(): THREE.Group {
 /**
  * Ancient Elf Mage — dark robe, hood, silver hair, staff with glowing orb.
  * Designed to read well from a top-down camera angle.
+ *
+ * Customization: optional `spec` overrides robe primary/trim colors, the head
+ * piece (hood / wizard hat / circlet) and the staff orb color.
  */
-export function entityPlayer(): THREE.Group {
+export interface PlayerLook {
+  robePrimary?: number;
+  robeTrim?: number;
+  orbColor?: number;
+  orbEmissive?: number;
+  hoodStyle?: "down" | "up" | "wizard" | "circlet";
+}
+
+export function entityPlayer(spec?: PlayerLook): THREE.Group {
+  const robePrimary = spec?.robePrimary ?? 0x1a1230;
+  const robeTrim    = spec?.robeTrim    ?? 0x8c6a2a;
+  const orbColor    = spec?.orbColor    ?? 0x6fc8ff;
+  const orbEmissive = spec?.orbEmissive ?? 0x3a9cff;
+  const hoodStyle   = spec?.hoodStyle   ?? "down";
+
   const g = new THREE.Group();
   // Boots (leather)
   const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.85 });
@@ -1033,7 +1050,7 @@ export function entityPlayer(): THREE.Group {
 
   // Long flowing robe — deep purple-black with subtle sheen.
   const robeMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1230,
+    color: robePrimary,
     roughness: 0.55,
     metalness: 0.15,
   });
@@ -1064,8 +1081,8 @@ export function entityPlayer(): THREE.Group {
   mantle.position.y = 1.06;
   g.add(mantle);
 
-  // Gold trim at hem
-  const goldMat = new THREE.MeshStandardMaterial({ color: 0x8c6a2a, roughness: 0.4, metalness: 0.6 });
+  // Gold trim at hem (customizable)
+  const goldMat = new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 });
   const hem = mkMesh(new THREE.TorusGeometry(0.42, 0.018, 5, 20), goldMat);
   hem.rotation.x = Math.PI / 2;
   hem.position.y = 0.13;
@@ -1098,12 +1115,51 @@ export function entityPlayer(): THREE.Group {
   hairTop.scale.set(1, 0.6, 1);
   g.add(hairTop);
 
-  // Pointed hood (hangs back over the shoulders)
+  // Hood / cap variant — controlled by hoodStyle.
   const hoodMat = new THREE.MeshStandardMaterial({ color: 0x0c0818, roughness: 0.85 });
-  const hood = mkMesh(new THREE.ConeGeometry(0.22, 0.55, 8), hoodMat);
-  hood.position.set(0, 1.18, -0.22);
-  hood.rotation.x = -0.25;
-  g.add(hood);
+  const trimMat = new THREE.MeshStandardMaterial({ color: robeTrim, roughness: 0.4, metalness: 0.6 });
+  if (hoodStyle === "down") {
+    const hood = mkMesh(new THREE.ConeGeometry(0.22, 0.55, 8), hoodMat);
+    hood.position.set(0, 1.18, -0.22);
+    hood.rotation.x = -0.25;
+    g.add(hood);
+  } else if (hoodStyle === "up") {
+    // Hood pulled up: drape covering top of head
+    const hoodTop = mkMesh(new THREE.SphereGeometry(0.21, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2), hoodMat);
+    hoodTop.position.set(0, 1.34, 0);
+    g.add(hoodTop);
+    const hoodBack = mkMesh(new THREE.ConeGeometry(0.18, 0.4, 8), hoodMat);
+    hoodBack.position.set(0, 1.22, -0.18);
+    hoodBack.rotation.x = -0.4;
+    g.add(hoodBack);
+  } else if (hoodStyle === "wizard") {
+    // Tall pointy wizard hat
+    const brim = mkMesh(new THREE.CylinderGeometry(0.24, 0.24, 0.025, 14), hoodMat);
+    brim.position.y = 1.42;
+    g.add(brim);
+    const cone = mkMesh(new THREE.ConeGeometry(0.15, 0.6, 12), hoodMat);
+    cone.position.y = 1.74;
+    cone.rotation.z = 0.12;
+    g.add(cone);
+    const tip = mkMesh(new THREE.SphereGeometry(0.025, 8, 6), trimMat);
+    tip.position.set(0.04, 2.05, 0);
+    g.add(tip);
+    // Star ornament on the front of the hat
+    const star = mkMesh(new THREE.IcosahedronGeometry(0.04, 0),
+      new THREE.MeshStandardMaterial({ color: orbColor, emissive: orbEmissive, emissiveIntensity: 1.2 }));
+    star.position.set(0, 1.6, 0.13);
+    g.add(star);
+  } else if (hoodStyle === "circlet") {
+    // Thin metal circlet with a center gem
+    const ring = mkMesh(new THREE.TorusGeometry(0.18, 0.012, 8, 24), trimMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 1.36;
+    g.add(ring);
+    const gem = mkMesh(new THREE.OctahedronGeometry(0.035, 0),
+      new THREE.MeshStandardMaterial({ color: orbColor, emissive: orbEmissive, emissiveIntensity: 1.5 }));
+    gem.position.set(0, 1.36, 0.18);
+    g.add(gem);
+  }
 
   // ------- Staff held to the right -------
   const staffMat = new THREE.MeshStandardMaterial({ map: woodTexture(), color: 0x3a2712, roughness: 0.9 });
@@ -1121,10 +1177,10 @@ export function entityPlayer(): THREE.Group {
     prong.rotation.x = Math.sin(a) * 0.4;
     g.add(prong);
   }
-  // Glowing orb
+  // Glowing orb (customizable color)
   const orbMat = new THREE.MeshStandardMaterial({
-    color: 0x6fc8ff,
-    emissive: 0x3a9cff,
+    color: orbColor,
+    emissive: orbEmissive,
     emissiveIntensity: 2.2,
     roughness: 0.15,
     transparent: true,
@@ -1135,7 +1191,7 @@ export function entityPlayer(): THREE.Group {
   g.add(orb);
   // Orb halo sprite
   const haloMat = new THREE.MeshBasicMaterial({
-    color: 0x6fc8ff, transparent: true, opacity: 0.35, depthWrite: false,
+    color: orbColor, transparent: true, opacity: 0.35, depthWrite: false,
   });
   const halo = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), haloMat);
   halo.position.copy(orb.position);

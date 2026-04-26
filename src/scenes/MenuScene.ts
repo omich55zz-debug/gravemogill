@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { progress, ACHIEVEMENTS } from "../systems/Progress";
 import { hasSave, readSave, deleteSave, saveAgeLabel } from "../systems/SaveSystem";
+import {
+  ROBES, HOODS, ORBS, loadCharacter, saveCharacter,
+  type RobeId, type HoodId, type OrbId,
+} from "../systems/Customization";
 
 export class MenuScene extends Phaser.Scene {
   private dailyBonus = 0;
@@ -149,6 +153,19 @@ export class MenuScene extends Phaser.Scene {
       newLabel.on("pointerup", () => this.confirmNewGame());
     }
 
+    // Customization button — always available below primary actions.
+    const customY = primaryY + (saveExists ? 138 : 78);
+    const customBtn = this.add.rectangle(width / 2, customY, 300, 36, 0x1a1820)
+      .setStrokeStyle(1, 0x6a5a36).setInteractive({ useHandCursor: true });
+    const customLabel = this.add.text(width / 2, customY, "✦ Облик мага", {
+      fontFamily: "serif", fontSize: "15px", color: "#d7c78b",
+    }).setOrigin(0.5);
+    customBtn.on("pointerover", () => customBtn.setFillStyle(0x2a2230));
+    customBtn.on("pointerout", () => customBtn.setFillStyle(0x1a1820));
+    customBtn.on("pointerup", () => this.openCustomizationModal());
+    customLabel.setInteractive({ useHandCursor: true });
+    customLabel.on("pointerup", () => this.openCustomizationModal());
+
     this.add.text(width / 2, height - 58,
       "Вы — Древний Эльф-Маг, последний страж родового некрополя.",
       { fontFamily: "serif", fontSize: "14px", color: "#a29680" }
@@ -283,5 +300,93 @@ export class MenuScene extends Phaser.Scene {
     if (!ok) return;
     deleteSave();
     this.scene.restart();
+  }
+
+  /** Modal sheet for choosing robe / hood / orb. Saves on close. */
+  private openCustomizationModal() {
+    const { width, height } = this.scale;
+    const spec = loadCharacter();
+    const c = this.add.container(0, 0).setDepth(100);
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.78)
+      .setInteractive();
+    c.add(overlay);
+    const W = Math.min(520, width - 40);
+    const H = Math.min(440, height - 40);
+    const panel = this.add.rectangle(width / 2, height / 2, W, H, 0x14101c, 0.98)
+      .setStrokeStyle(2, 0x8c6a36);
+    c.add(panel);
+    const t = this.add.text(width / 2, height / 2 - H / 2 + 18, "Облик Древнего Эльфа-Мага", {
+      fontFamily: "serif", fontSize: "20px", color: "#f0e7c8", fontStyle: "bold",
+    }).setOrigin(0.5);
+    c.add(t);
+
+    let curRobe: RobeId = spec.robe;
+    let curHood: HoodId = spec.hood;
+    let curOrb:  OrbId  = spec.orb;
+    const previewLabel = this.add.text(width / 2, height / 2 - H / 2 + 50, "", {
+      fontFamily: "serif", fontSize: "13px", color: "#c9a14a", fontStyle: "italic",
+    }).setOrigin(0.5);
+    c.add(previewLabel);
+    const updatePreview = () => {
+      const r = ROBES.find(x => x.id === curRobe)!;
+      const h = HOODS.find(x => x.id === curHood)!;
+      const o = ORBS.find(x => x.id === curOrb)!;
+      previewLabel.setText(`${r.name} · ${h.name} · ${o.name}`);
+    };
+
+    const sectionY = (idx: number) => height / 2 - H / 2 + 90 + idx * 90;
+    const drawRow = <T extends { id: string; name: string }>(
+      label: string,
+      items: T[],
+      getCur: () => string,
+      setCur: (id: string) => void,
+      yIdx: number
+    ) => {
+      const ly = sectionY(yIdx);
+      const lt = this.add.text(width / 2 - W / 2 + 18, ly - 22, label, {
+        fontFamily: "serif", fontSize: "13px", color: "#c9a14a",
+      });
+      c.add(lt);
+      const totalW = W - 40;
+      const slotW = Math.floor(totalW / items.length);
+      items.forEach((it, i) => {
+        const x = width / 2 - W / 2 + 20 + slotW * i + slotW / 2;
+        const isCur = () => it.id === getCur();
+        const bg = this.add.rectangle(x, ly + 12, slotW - 8, 44,
+          isCur() ? 0x4a3a20 : 0x1c1624, 1).setStrokeStyle(1, isCur() ? 0xc9a14a : 0x4a3a22);
+        const tx = this.add.text(x, ly + 12, it.name, {
+          fontFamily: "serif", fontSize: "10px", color: isCur() ? "#f0e7c8" : "#c9b78a",
+          align: "center", wordWrap: { width: slotW - 14 },
+        }).setOrigin(0.5);
+        bg.setInteractive({ useHandCursor: true });
+        bg.on("pointerup", () => {
+          setCur(it.id);
+          // Persist immediately so reopening picks up the new selection.
+          saveCharacter({ robe: curRobe, hood: curHood, orb: curOrb });
+          c.destroy();
+          this.openCustomizationModal();
+        });
+        c.add([bg, tx]);
+      });
+    };
+    drawRow("Мантия",   ROBES, () => curRobe, id => { curRobe = id as RobeId; }, 0);
+    drawRow("Голова",   HOODS, () => curHood, id => { curHood = id as HoodId; }, 1);
+    drawRow("Кристалл", ORBS,  () => curOrb,  id => { curOrb  = id as OrbId;  }, 2);
+    updatePreview();
+
+    // Save button
+    const saveY = height / 2 + H / 2 - 32;
+    const saveBg = this.add.rectangle(width / 2, saveY, 200, 40, 0x4a3a20)
+      .setStrokeStyle(2, 0xc9a14a).setInteractive({ useHandCursor: true });
+    const saveLbl = this.add.text(width / 2, saveY, "Сохранить облик", {
+      fontFamily: "serif", fontSize: "15px", color: "#f5e7bc", fontStyle: "bold",
+    }).setOrigin(0.5);
+    c.add([saveBg, saveLbl]);
+    const close = () => {
+      saveCharacter({ robe: curRobe, hood: curHood, orb: curOrb });
+      c.destroy();
+    };
+    saveBg.on("pointerup", close);
+    saveLbl.setInteractive({ useHandCursor: true }).on("pointerup", close);
   }
 }

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { generatePerson } from "../data/names";
 import { reputation } from "./Reputation";
+import { pickTheme, THEMES, matchesTheme, type ThemeId, type PlacedGrave } from "../data/graveThemes";
 
 export type OrderTier = "modest" | "decent" | "lavish";
 
@@ -23,6 +24,8 @@ export interface Order {
   graveCol?: number;
   graveRow?: number;
   flavor: string;
+  theme: ThemeId;
+  themeMatched?: boolean;
 }
 
 const FLAVORS = [
@@ -59,6 +62,7 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
       budget = 480 + Math.floor(Math.random() * 180);    // 480–660
       minLuxury = 55; maxLuxury = 110; daysAllowed = 5;
     }
+    const theme = pickTheme();
     const order: Order = {
       id: `o${_seq++}`,
       deceasedName: person.full,
@@ -74,7 +78,8 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
       pathBonusTiles: 0,
       completed: false,
       failed: false,
-      flavor: pick(FLAVORS),
+      flavor: theme === "regular" ? pick(FLAVORS) : THEMES[theme].description,
+      theme,
     };
     this.pending.push(order);
     this.emit("offered", order);
@@ -92,9 +97,10 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
     this.emit("declined", order);
   }
 
-  complete(order: Order, actualLuxury: number, pathBonusTiles: number, currentDay: number): {
+  complete(order: Order, actualLuxury: number, pathBonusTiles: number, currentDay: number, grave?: PlacedGrave): {
     payout: number;
     verdict: "perfect" | "under" | "over" | "late";
+    themeBonus: number;
   } {
     order.pathBonusTiles = pathBonusTiles;
     let verdict: "perfect" | "under" | "over" | "late" = "perfect";
@@ -114,6 +120,19 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
     }
     // Path bonus: each path tile adjacent to the grave gives +3.
     payout += pathBonusTiles * 3;
+    // Special-grave theme bonus — paid only if the placed grave matches the
+    // theme's requirements at the time of completion.
+    let themeBonus = 0;
+    if (order.theme && order.theme !== "regular" && grave) {
+      const matched = matchesTheme(order.theme, grave);
+      order.themeMatched = matched;
+      if (matched && verdict !== "late") {
+        const spec = THEMES[order.theme];
+        themeBonus = Math.floor(payout * spec.payoutBonus);
+        payout += themeBonus;
+        reputation.awardSpecialGrave(order.theme);
+      }
+    }
     // Reputation rank gives a flat payout multiplier on perfect / under / over.
     if (verdict !== "late") {
       payout = Math.floor(payout * reputation.multiplier());
@@ -125,8 +144,8 @@ export class OrderSystem extends Phaser.Events.EventEmitter {
     if (verdict === "perfect") reputation.awardCompleted(2);
     else if (verdict === "under" || verdict === "over") reputation.awardCompleted(1);
     else reputation.penalizeFailed(1); // "late"
-    this.emit("completed", { order, payout, verdict });
-    return { payout, verdict };
+    this.emit("completed", { order, payout, verdict, themeBonus });
+    return { payout, verdict, themeBonus };
   }
 
   checkDeadlines(currentDay: number) {

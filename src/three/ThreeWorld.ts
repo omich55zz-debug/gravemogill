@@ -15,6 +15,7 @@ import {
 import {
   grassGroundTexture, stonePathTexture, earthTexture, nightSkyTexture,
 } from "./textures";
+import { loadCharacter, robeColors, orbColors } from "../systems/Customization";
 
 // 1 tile = 1 world unit in Three.js space.
 // Grid (col, row) maps to world (x=col-COLS/2, 0, z=row-ROWS/2).
@@ -814,7 +815,16 @@ export class ThreeWorld {
   }
 
   addPlayerMesh(): THREE.Object3D {
-    const m = entityPlayer();
+    const spec = loadCharacter();
+    const robe = robeColors(spec.robe);
+    const orb = orbColors(spec.orb);
+    const m = entityPlayer({
+      robePrimary: robe.primary,
+      robeTrim: robe.trim,
+      orbColor: orb.color,
+      orbEmissive: orb.emissive,
+      hoodStyle: spec.hood,
+    });
     this.scene.add(m);
     return m;
   }

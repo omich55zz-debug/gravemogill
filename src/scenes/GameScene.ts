@@ -193,7 +193,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Order events
-    this.orders.on("completed", ({ order, payout, verdict }: { order: Order; payout: number; verdict: string }) => {
+    this.orders.on("completed", ({ order, payout, verdict, themeBonus }: { order: Order; payout: number; verdict: string; themeBonus?: number }) => {
       this.economy.earn(payout);
       const cell = this.grid.at(order.graveCol!, order.graveRow!);
       const v = cell?.grave ? this.graveVisuals.get(graveKey(order.graveCol!, order.graveRow!)) : undefined;
@@ -201,6 +201,11 @@ export class GameScene extends Phaser.Scene {
       const color = verdict === "perfect" ? "#b8e994" : verdict === "over" ? "#e6a94a" : verdict === "under" ? "#ffd080" : "#ff7070";
       const msg = verdict === "perfect" ? "Идеально!" : verdict === "over" ? "Слишком пышно" : verdict === "under" ? "Скромновато" : "Просрочено";
       this.showFloatText(`${msg} +${payout}₽`, this.player.x, this.player.y - 20, color);
+      if (themeBonus && themeBonus > 0) {
+        this.time.delayedCall(450, () => {
+          this.showFloatText(`Тема исполнена! +${themeBonus}₽`, this.player.x, this.player.y - 36, "#d8b8ff");
+        });
+      }
       audio.play(verdict === "failed" ? "fail" : "success");
       audio.play("coin");
       this.tryUnlock("first_complete");
@@ -667,7 +672,11 @@ export class GameScene extends Phaser.Scene {
     cell.grave.completed = true;
     const v = this.graveVisuals.get(graveKey(cell.col, cell.row));
     if (v) { v.orderId = order.id; v.completed = true; }
-    this.orders.complete(order, lux, pathBonus, this.gameTime.day);
+    this.orders.complete(order, lux, pathBonus, this.gameTime.day, {
+      tombstoneId: cell.grave.tombstoneId,
+      decorations: [...cell.grave.decorations],
+      fence: cell.grave.fence,
+    });
   }
 
   /** Per-day income from paths. */

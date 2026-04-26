@@ -12,6 +12,7 @@ import { shop, SHOVELS, HELPERS } from "../systems/Shop";
 import { progress, ACHIEVEMENTS } from "../systems/Progress";
 import { WEATHER_NAME_RU, WEATHER_ICON } from "../systems/Weather";
 import { reputation } from "../systems/Reputation";
+import { THEMES } from "../data/graveThemes";
 import { i18n } from "../systems/I18n";
 
 /**
@@ -399,9 +400,21 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(12, 72);
     const bg = this.add.rectangle(0, 0, W, H, 0x1a1422, 0.96)
       .setStrokeStyle(1, 0x8c6a36).setOrigin(0, 0);
+    const theme = THEMES[order.theme ?? "regular"];
     const title = this.add.text(PAD, 4, "Новый заказ", {
       fontFamily: "serif", fontSize: "12px", color: "#d7c78b",
     });
+    // Theme banner with badge — only shown for non-regular themes.
+    let themeBanner: Phaser.GameObjects.GameObject[] = [];
+    if (order.theme && order.theme !== "regular") {
+      const tw = 110;
+      const tBg = this.add.rectangle(W / 2 + 16, 12, tw, 18, theme.badgeColor, 0.85)
+        .setStrokeStyle(1, 0xc9a14a).setOrigin(0.5);
+      const tTxt = this.add.text(W / 2 + 16, 12, `${theme.badge} ${theme.name}`, {
+        fontFamily: "serif", fontSize: "11px", color: "#f5e7bc", fontStyle: "bold",
+      }).setOrigin(0.5);
+      themeBanner = [tBg, tTxt];
+    }
     // Portrait: smaller (scale 1.2 instead of 1.8) to leave room for text.
     const portrait = this.add.image(PAD, 22, portraitKey(order.gender, order.portraitIdx))
       .setOrigin(0, 0).setScale(1.2);
@@ -422,7 +435,7 @@ export class UIScene extends Phaser.Scene {
       fontFamily: "serif", fontSize: "9px", color: "#9a8f72",
       wordWrap: { width: W - PAD * 2 },
     });
-    c.add([bg, title, portrait, name, meta, lux, flavor]);
+    c.add([bg, title, portrait, name, meta, lux, flavor, ...themeBanner]);
 
     // Buttons along the bottom, sharing the full width.
     const btnW = Math.floor((W - PAD * 3) / 2);
@@ -480,13 +493,20 @@ export class UIScene extends Phaser.Scene {
     this.activeOrderPanel.add(title);
     y += 18;
     for (const o of this.orders.active.slice(0, 4)) {
+      const theme = THEMES[o.theme ?? "regular"];
       const bg = this.add.rectangle(0, y, 200, 40, 0x1a1422, 0.9).setStrokeStyle(1, 0x3a2f40).setOrigin(1, 0);
       const tierRus = o.tier === "modest" ? "Скромный" : o.tier === "decent" ? "Достойный" : "Пышный";
       const daysLeft = Math.max(0, o.deadlineDay - this.gameTime.day);
-      const txt = this.add.text(-6, y + 4, `${shorten(o.deceasedName, 18)}\n${tierRus} · ₽${o.budget} · ${daysLeft} дн.`, {
+      const txt = this.add.text(-30, y + 4, `${shorten(o.deceasedName, 16)}\n${tierRus} · ₽${o.budget} · ${daysLeft} дн.`, {
         fontFamily: "serif", fontSize: "10px", color: "#e8e1cf",
       }).setOrigin(1, 0);
       this.activeOrderPanel.add([bg, txt]);
+      // Theme badge (right side of card)
+      if (o.theme && o.theme !== "regular") {
+        const badge = this.add.circle(-12, y + 20, 11, theme.badgeColor, 1).setStrokeStyle(1, 0xc9a14a).setOrigin(0.5);
+        const bt = this.add.text(-12, y + 20, theme.badge, { fontFamily: "serif", fontSize: "13px", color: "#f0e7c8" }).setOrigin(0.5);
+        this.activeOrderPanel.add([badge, bt]);
+      }
       y += 46;
     }
     if (this.orders.active.length === 0) {
