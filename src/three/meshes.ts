@@ -523,6 +523,24 @@ export function buildingCathedral(): THREE.Group {
   const innerB = new THREE.PointLight(0xffc080, 1.0, 5, 1.6);
   innerB.position.set(0, 1.8, 1.6); g.add(innerB);
 
+  // Gargoyle silhouettes at the four roof corners (small dark crouching forms)
+  for (const [gx, gz] of [[-2.4, -1.7], [2.4, -1.7], [-2.4, 1.7], [2.4, 1.7]]) {
+    const gargoyle = new THREE.Group();
+    const body = mkMesh(new THREE.SphereGeometry(0.18, 8, 6), stoneDark);
+    body.scale.set(1.2, 0.8, 1);
+    gargoyle.add(body);
+    const head = mkMesh(new THREE.SphereGeometry(0.11, 8, 6), stoneDark);
+    head.position.set(0, 0.13, 0.16);
+    gargoyle.add(head);
+    // Tiny wings
+    const wing = mkMesh(new THREE.BoxGeometry(0.04, 0.18, 0.32), stoneDark);
+    wing.position.set(0, 0.1, -0.05);
+    gargoyle.add(wing);
+    gargoyle.position.set(gx, 4.85, gz);
+    gargoyle.lookAt(gx * 2, 4.85, gz * 2);
+    g.add(gargoyle);
+  }
+
   return g;
 }
 

@@ -50,60 +50,10 @@ export class UIScene extends Phaser.Scene {
 
   create() {
     const { width } = this.scale;
+    this.buildTopHud();
 
-    // Top HUD bar — gothic layered frame with soft inner gradient.
-    const bar = this.add.graphics().setDepth(1);
-    bar.fillStyle(0x07050c, 0.95).fillRect(0, 0, width, 60);
-    // Inner highlight line
-    bar.lineStyle(1, 0x4a3a22, 0.55).lineBetween(0, 1, width, 1);
-    // Bottom separator — thicker gold line with shadow underneath
-    bar.lineStyle(2, 0x8c6a36, 0.85).lineBetween(0, 58, width, 58);
-    bar.lineStyle(1, 0x1a1208, 0.6).lineBetween(0, 60, width, 60);
-    // Corner flourishes (rune diamond markers) at left/right edges
-    const flourishL = this.add.text(10, 22, "✦", { fontFamily: "serif", fontSize: "16px", color: "#c9a14a" }).setDepth(2);
-    const flourishR = this.add.text(width - 24, 22, "✦", { fontFamily: "serif", fontSize: "16px", color: "#c9a14a" }).setDepth(2).setOrigin(0, 0);
-    this.events.on("destroy", () => { flourishL.destroy(); flourishR.destroy(); });
-
-    // Coin pouch icon next to money amount
-    this.add.text(36, 14, "⚜", { fontFamily: "serif", fontSize: "18px", color: "#c9a14a" }).setDepth(2);
-    this.hudMoney = this.add.text(60, 12, "₽ 0", {
-      fontFamily: "serif", fontSize: "24px", color: "#f5e7bc", fontStyle: "bold",
-    }).setDepth(2);
-    this.add.text(60, 37, "Казна некрополя", {
-      fontFamily: "serif", fontSize: "11px", color: "#8a7a56", fontStyle: "italic",
-    }).setDepth(2);
-
-    // Central day + weather/moon indicator
-    this.hudDay = this.add.text(width / 2, 9, "День 1", {
-      fontFamily: "serif", fontSize: "20px", color: "#e8e1cf", fontStyle: "bold",
-    }).setOrigin(0.5, 0).setDepth(2);
-    this.hudTime = this.add.text(width / 2, 34, "☾ 08:00  ·  ☀ Ясно", {
-      fontFamily: "serif", fontSize: "12px", color: "#9a8f72", fontStyle: "italic",
-    }).setOrigin(0.5, 0).setDepth(2);
-
-    this.hudHint = this.add.text(width - 40, 14, "", {
-      fontFamily: "serif", fontSize: "14px", color: "#d7c78b",
-    }).setOrigin(1, 0).setDepth(2);
-
-    // Reputation panel (just below the top HUD bar, left side)
-    const rx = 14, ry = 66;
-    const repBg = this.add.graphics().setDepth(1);
-    repBg.fillStyle(0x07050c, 0.85).fillRoundedRect(rx, ry, 218, 42, 5);
-    repBg.lineStyle(1, 0x8c6a36, 0.7).strokeRoundedRect(rx, ry, 218, 42, 5);
-    this.add.text(rx + 8, ry + 4, "✦", { fontFamily: "serif", fontSize: "14px", color: "#c9a14a" }).setDepth(2);
-    this.hudRepRank = this.add.text(rx + 24, ry + 3, "Новичок", {
-      fontFamily: "serif", fontSize: "13px", color: "#e8d9a8", fontStyle: "bold",
-    }).setDepth(2);
-    this.hudRepLabel = this.add.text(rx + 210, ry + 4, "0 / 30", {
-      fontFamily: "serif", fontSize: "11px", color: "#9a8f72",
-    }).setOrigin(1, 0).setDepth(2);
-    this.hudRepBar = this.add.graphics().setDepth(2);
-    this.add.text(rx + 8, ry + 26, "Репутация", {
-      fontFamily: "serif", fontSize: "10px", color: "#7d6e4c", fontStyle: "italic",
-    }).setDepth(2);
-
-    // Active order panel (top-right, below HUD)
-    this.activeOrderPanel = this.add.container(width - 16, 116);
+    // Active order panel (top-right, below HUD + buttons row)
+    this.activeOrderPanel = this.add.container(width - 16, 144);
 
     // Bottom controls: virtual stick + action button
     this.createVirtualStick();
@@ -197,7 +147,9 @@ export class UIScene extends Phaser.Scene {
 
   private createTopRightButtons() {
     const size = 36;
-    const y = 14;
+    const isNarrow = this.scale.width < 520;
+    // Place below the top HUD bar so they don't overlap the rep card.
+    const y = (isNarrow ? 64 : 80) + 6;
     let slot = 0;
     const make = (label: string, onClick: () => void, refresh?: (icon: Phaser.GameObjects.Text) => void) => {
       const x = this.scale.width - (size + 8) * (slot + 1) - 4;
@@ -226,6 +178,104 @@ export class UIScene extends Phaser.Scene {
 
   // -------------- HUD --------------
 
+  /**
+   * Ornate gothic top HUD. Three rounded "cards" sit on a translucent
+   * black bar with a thick gold rule and rune flourishes:
+   *   - Left: coin pouch + treasury amount
+   *   - Center: day + time + weather (with phase glyph)
+   *   - Right: reputation card with rank, points, gold progress bar
+   */
+  private buildTopHud() {
+    const { width } = this.scale;
+    const isNarrow = width < 520;
+    const barH = isNarrow ? 64 : 80;
+
+    // Backdrop layer with subtle gradient + heavy gold separator
+    const back = this.add.graphics().setDepth(1);
+    back.fillStyle(0x05030a, 0.95).fillRect(0, 0, width, barH);
+    back.fillStyle(0x110a18, 0.55).fillRect(0, 0, width, barH * 0.4);
+    back.lineStyle(1, 0x4a3a22, 0.55).lineBetween(0, 1, width, 1);
+    // Double rule below
+    back.lineStyle(2, 0xc9a14a, 0.85).lineBetween(0, barH - 4, width, barH - 4);
+    back.lineStyle(1, 0x6a4a20, 0.6).lineBetween(0, barH - 1, width, barH - 1);
+
+    // Rune corners
+    const flourishStyle = { fontFamily: "serif", fontSize: isNarrow ? "14px" : "18px", color: "#c9a14a" } as Phaser.Types.GameObjects.Text.TextStyle;
+    this.add.text(8, (barH - 24) / 2, "✦", flourishStyle).setDepth(2);
+    this.add.text(width - 24, (barH - 24) / 2, "✦", flourishStyle).setDepth(2);
+
+    const cardStroke = 0xc9a14a;
+    const cardFill = 0x1a1018;
+
+    // ===== Card 1: Treasury (left) =====
+    const card1W = isNarrow ? 138 : 198;
+    const cardH = barH - 18;
+    const card1X = isNarrow ? 18 : 22;
+    const card1Y = 9;
+    const card1 = this.add.graphics().setDepth(2);
+    card1.fillStyle(cardFill, 0.92).fillRoundedRect(card1X, card1Y, card1W, cardH, 6);
+    card1.lineStyle(1.5, cardStroke, 0.95).strokeRoundedRect(card1X, card1Y, card1W, cardH, 6);
+    // Inner highlight
+    card1.lineStyle(1, 0x6a4820, 0.55).strokeRoundedRect(card1X + 2, card1Y + 2, card1W - 4, cardH - 4, 4);
+    // Coin pouch glyph
+    this.add.text(card1X + 12, card1Y + 5, "⚜", {
+      fontFamily: "serif", fontSize: isNarrow ? "20px" : "26px", color: "#e6c266",
+    }).setDepth(3);
+    this.hudMoney = this.add.text(card1X + (isNarrow ? 36 : 46), card1Y + 4, "₽ 0", {
+      fontFamily: "serif", fontSize: isNarrow ? "18px" : "24px", color: "#f5e7bc", fontStyle: "bold",
+    }).setDepth(3);
+    if (!isNarrow) {
+      this.add.text(card1X + 46, card1Y + 32, "Казна некрополя", {
+        fontFamily: "serif", fontSize: "11px", color: "#8a7a56", fontStyle: "italic",
+      }).setDepth(3);
+    }
+
+    // ===== Card 2: Day · Time · Weather (center) =====
+    const card2W = isNarrow ? 168 : 240;
+    const card2X = (width - card2W) / 2;
+    const card2Y = 9;
+    const card2 = this.add.graphics().setDepth(2);
+    card2.fillStyle(cardFill, 0.92).fillRoundedRect(card2X, card2Y, card2W, cardH, 6);
+    card2.lineStyle(1.5, cardStroke, 0.95).strokeRoundedRect(card2X, card2Y, card2W, cardH, 6);
+    card2.lineStyle(1, 0x6a4820, 0.55).strokeRoundedRect(card2X + 2, card2Y + 2, card2W - 4, cardH - 4, 4);
+    this.hudDay = this.add.text(card2X + card2W / 2, card2Y + 4, "День 1", {
+      fontFamily: "serif", fontSize: isNarrow ? "16px" : "20px", color: "#e8e1cf", fontStyle: "bold",
+    }).setOrigin(0.5, 0).setDepth(3);
+    this.hudTime = this.add.text(card2X + card2W / 2, card2Y + (isNarrow ? 28 : 34), "☾ 08:00 · ☀ Ясно", {
+      fontFamily: "serif", fontSize: isNarrow ? "11px" : "13px", color: "#a89c7a", fontStyle: "italic",
+    }).setOrigin(0.5, 0).setDepth(3);
+
+    // ===== Card 3: Reputation (right) =====
+    const card3W = isNarrow ? 138 : 220;
+    const card3X = width - card3W - (isNarrow ? 18 : 22);
+    const card3Y = 9;
+    const card3 = this.add.graphics().setDepth(2);
+    card3.fillStyle(cardFill, 0.92).fillRoundedRect(card3X, card3Y, card3W, cardH, 6);
+    card3.lineStyle(1.5, cardStroke, 0.95).strokeRoundedRect(card3X, card3Y, card3W, cardH, 6);
+    card3.lineStyle(1, 0x6a4820, 0.55).strokeRoundedRect(card3X + 2, card3Y + 2, card3W - 4, cardH - 4, 4);
+    this.add.text(card3X + 10, card3Y + 4, "✧", {
+      fontFamily: "serif", fontSize: isNarrow ? "16px" : "20px", color: "#c9a14a",
+    }).setDepth(3);
+    this.hudRepRank = this.add.text(card3X + (isNarrow ? 30 : 36), card3Y + 4, "Новичок", {
+      fontFamily: "serif", fontSize: isNarrow ? "13px" : "16px", color: "#e8d9a8", fontStyle: "bold",
+    }).setDepth(3);
+    this.hudRepLabel = this.add.text(card3X + card3W - 8, card3Y + 6, "0 / 30", {
+      fontFamily: "serif", fontSize: isNarrow ? "10px" : "11px", color: "#9a8f72",
+    }).setOrigin(1, 0).setDepth(3);
+    this.hudRepBar = this.add.graphics().setDepth(3);
+
+    // Hint text — placed under the bar (not inside cards anymore)
+    this.hudHint = this.add.text(width / 2, barH + 4, "", {
+      fontFamily: "serif", fontSize: isNarrow ? "12px" : "14px", color: "#d7c78b",
+      backgroundColor: "rgba(7,5,12,0.7)", padding: { x: 8, y: 3 },
+    }).setOrigin(0.5, 0).setDepth(3);
+
+    // Stash card3 metrics for reputation bar refresh
+    (this as unknown as { _repRect: { x: number; y: number; w: number; h: number } })._repRect = {
+      x: card3X, y: card3Y, w: card3W, h: cardH,
+    };
+  }
+
   private refreshHud() {
     this.hudMoney.setText(`₽ ${this.economy.money}`);
     this.hudDay.setText(`День ${this.gameTime.day}`);
@@ -243,17 +293,22 @@ export class UIScene extends Phaser.Scene {
     const rank = reputation.rank();
     const next = reputation.nextRank();
     this.hudRepRank.setText(rank.name);
-    const rx = 14, ry = 66;
+    const rect = (this as unknown as { _repRect?: { x: number; y: number; w: number; h: number } })._repRect;
+    if (!rect) return;
+    const barX = rect.x + 12;
+    const barY = rect.y + rect.h - 12;
+    const barW = rect.w - 24;
     this.hudRepBar.clear();
-    this.hudRepBar.fillStyle(0x1a120a, 1).fillRect(rx + 8, ry + 38, 200, 3);
+    this.hudRepBar.fillStyle(0x1a120a, 1).fillRoundedRect(barX, barY, barW, 5, 2);
     if (next) {
       const span = next.threshold - rank.threshold;
       const pos = reputation.points - rank.threshold;
       const pct = Math.max(0, Math.min(1, span > 0 ? pos / span : 0));
-      this.hudRepBar.fillStyle(0xc9a14a, 1).fillRect(rx + 8, ry + 38, 200 * pct, 3);
+      this.hudRepBar.fillGradientStyle(0xc9a14a, 0xffe7a8, 0xc9a14a, 0xffe7a8, 1)
+        .fillRoundedRect(barX, barY, Math.max(2, barW * pct), 5, 2);
       this.hudRepLabel.setText(`${reputation.points} / ${next.threshold}`);
     } else {
-      this.hudRepBar.fillStyle(0xe6c266, 1).fillRect(rx + 8, ry + 38, 200, 3);
+      this.hudRepBar.fillStyle(0xe6c266, 1).fillRoundedRect(barX, barY, barW, 5, 2);
       this.hudRepLabel.setText(`${reputation.points} ★`);
     }
   }
@@ -288,21 +343,31 @@ export class UIScene extends Phaser.Scene {
 
   private layoutResponsive() {
     const { width, height } = this.scale;
-    this.activeOrderPanel.setPosition(width - 16, 116);
+    this.activeOrderPanel.setPosition(width - 16, 144);
 
-    this.stickBase.setPosition(90, height - 90);
-    this.stickKnob.setPosition(90, height - 90);
+    const baseR = this.stickBase?.radius ?? 54;
+    const sx = baseR + 22;
+    const sy = height - baseR - 22;
+    this.stickBase?.setPosition(sx, sy);
+    this.stickKnob?.setPosition(sx, sy);
 
-    this.actionBtn.setPosition(width - 90, height - 90);
-    this.upgradeBtn?.setPosition(width - 200, height - 90);
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const ar = isMobile ? 56 : 46;
+    this.actionBtn?.setPosition(width - ar - 18, height - ar - 18);
+    this.upgradeBtn?.setPosition(width - ar * 2 - 60, height - ar - 18);
   }
 
   // -------------- Virtual stick --------------
 
   private createVirtualStick() {
     const { height } = this.scale;
-    this.stickBase = this.add.circle(90, height - 90, 54, 0x000000, 0.35).setStrokeStyle(2, 0x8c6a36, 0.8).setScrollFactor(0);
-    this.stickKnob = this.add.circle(90, height - 90, 24, 0x8c6a36, 0.9).setStrokeStyle(2, 0xd7c78b, 0.8).setScrollFactor(0);
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const baseR = isMobile ? 64 : 54;
+    const knobR = isMobile ? 30 : 24;
+    const cx = baseR + 22;
+    const cy = height - baseR - 22;
+    this.stickBase = this.add.circle(cx, cy, baseR, 0x05030a, 0.6).setStrokeStyle(2.5, 0xc9a14a, 0.85).setScrollFactor(0);
+    this.stickKnob = this.add.circle(cx, cy, knobR, 0x6a4820, 0.95).setStrokeStyle(2, 0xffe7a8, 0.9).setScrollFactor(0);
     this.stickBase.setInteractive();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.stickActive) return;
@@ -327,7 +392,7 @@ export class UIScene extends Phaser.Scene {
     const bx = this.stickBase.x, by = this.stickBase.y;
     const dx = px - bx, dy = py - by;
     const d = Math.hypot(dx, dy);
-    const max = 44;
+    const max = (this.stickBase.radius ?? 54) - 14;
     const clamped = Math.min(d, max);
     const nx = d === 0 ? 0 : dx / d * clamped;
     const ny = d === 0 ? 0 : dy / d * clamped;
@@ -346,35 +411,51 @@ export class UIScene extends Phaser.Scene {
 
   private createActionButton() {
     const { width, height } = this.scale;
-    this.actionBtn = this.add.container(width - 90, height - 90);
-    const bg = this.add.circle(0, 0, 42, 0x8c6a36, 0.9).setStrokeStyle(2, 0xd7c78b, 0.8);
-    const label = this.add.text(0, 0, "Действие", { fontFamily: "serif", fontSize: "13px", color: "#f0e7c8" }).setOrigin(0.5);
-    this.actionBtn.add([bg, label]);
-    bg.setInteractive({ useHandCursor: true });
-    bg.on("pointerup", () => this.game_.triggerAction());
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const radius = isMobile ? 56 : 46;
+    this.actionBtn = this.add.container(width - radius - 18, height - radius - 18);
+    // Outer halo
+    const halo = this.add.circle(0, 0, radius + 6, 0xc9a14a, 0.18);
+    // Main button: gradient ring + dark stone center
+    const ring = this.add.circle(0, 0, radius, 0x1a1018, 0.95).setStrokeStyle(3, 0xc9a14a, 0.95);
+    const inner = this.add.circle(0, 0, radius - 6, 0x6a4820, 0.45).setStrokeStyle(1, 0x6a4820, 0.55);
+    const label = this.add.text(0, -2, "✦", {
+      fontFamily: "serif", fontSize: `${Math.floor(radius * 0.8)}px`, color: "#f5e7bc",
+    }).setOrigin(0.5);
+    const sub = this.add.text(0, radius - 14, "Действие", {
+      fontFamily: "serif", fontSize: "11px", color: "#d8c890",
+    }).setOrigin(0.5);
+    this.actionBtn.add([halo, ring, inner, label, sub]);
+    ring.setInteractive(new Phaser.Geom.Circle(0, 0, radius), Phaser.Geom.Circle.Contains);
+    ring.on("pointerdown", () => { ring.setFillStyle(0x2c1c30, 0.95); });
+    ring.on("pointerup", () => { ring.setFillStyle(0x1a1018, 0.95); this.game_.triggerAction(); });
+    ring.on("pointerout", () => { ring.setFillStyle(0x1a1018, 0.95); });
   }
 
   // -------------- Upgrade building button --------------
 
   private createUpgradeButton() {
     const { width, height } = this.scale;
-    this.upgradeBtn = this.add.container(width - 200, height - 90);
-    const bg = this.add.rectangle(0, 0, 116, 60, 0x251a2c, 0.95)
-      .setStrokeStyle(2, 0xc9a14a, 0.9);
-    this.upgradeBtnLabel = this.add.text(0, -10, "✦ Улучшить", {
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const ar = isMobile ? 56 : 46;
+    this.upgradeBtn = this.add.container(width - ar * 2 - 60, height - ar - 18);
+    const bg = this.add.rectangle(0, 0, 132, ar * 1.3, 0x1a1018, 0.95)
+      .setStrokeStyle(2, 0xc9a14a, 0.95);
+    const inner = this.add.rectangle(0, 0, 128, ar * 1.3 - 4, 0x6a4820, 0.18)
+      .setStrokeStyle(1, 0x6a4820, 0.55);
+    this.upgradeBtnLabel = this.add.text(0, -ar * 0.3, "✦ Улучшить", {
       fontFamily: "serif", fontSize: "13px", color: "#f5e7bc", fontStyle: "bold",
     }).setOrigin(0.5);
-    this.upgradeBtnSub = this.add.text(0, 10, "1200₽", {
-      fontFamily: "serif", fontSize: "12px", color: "#d8c890",
+    this.upgradeBtnSub = this.add.text(0, ar * 0.18, "1200₽", {
+      fontFamily: "serif", fontSize: "13px", color: "#d8c890",
     }).setOrigin(0.5);
-    this.upgradeBtn.add([bg, this.upgradeBtnLabel, this.upgradeBtnSub]);
+    this.upgradeBtn.add([bg, inner, this.upgradeBtnLabel, this.upgradeBtnSub]);
     this.upgradeBtn.setVisible(false);
     bg.setInteractive({ useHandCursor: true });
     bg.on("pointerup", () => {
       const slot = this.game_.nearbyBuilding;
       if (slot) this.game_.upgradeBuilding(slot);
     });
-    this.scale.on("resize", () => this.layoutResponsive());
   }
 
   /** Refresh upgrade button visibility/cost based on player proximity. */
@@ -396,32 +477,50 @@ export class UIScene extends Phaser.Scene {
   // -------------- Orders button --------------
 
   private createOrdersButton() {
-    const btn = this.add.container(this.scale.width - 90, 120);
-    const bg = this.add.rectangle(0, 0, 140, 36, 0x2a1f2f, 0.9).setStrokeStyle(1, 0x8c6a36);
-    const label = this.add.text(0, 0, "Заказы", { fontFamily: "serif", fontSize: "14px", color: "#f0e7c8" }).setOrigin(0.5);
+    const isNarrow = this.scale.width < 520;
+    const yBase = (isNarrow ? 64 : 80) + 6;
+    // Place left of the top-right icon row (4 icons * (36+8)=176px wide).
+    const btnX = this.scale.width - 176 - 80;
+    const btnY = yBase + 18;
+    const btn = this.add.container(btnX, btnY);
+    const bg = this.add.rectangle(0, 0, 130, 36, 0x1a1018, 0.95).setStrokeStyle(2, 0xc9a14a, 0.95);
+    const label = this.add.text(0, 0, "✉ Заказы", { fontFamily: "serif", fontSize: "13px", color: "#f5e7bc", fontStyle: "bold" }).setOrigin(0.5);
     btn.add([bg, label]);
     bg.setInteractive({ useHandCursor: true });
     bg.on("pointerup", () => this.openOrdersList());
 
-    this.scale.on("resize", () => btn.setPosition(this.scale.width - 90, 120));
+    this.scale.on("resize", () => {
+      const nx = this.scale.width - 176 - 80;
+      btn.setPosition(nx, btnY);
+    });
   }
 
   // -------------- Camera zoom buttons --------------
 
   private createZoomButtons() {
-    const make = (y: number, label: string, fn: () => void) => {
-      const c = this.add.container(this.scale.width - 30, y);
-      const bg = this.add.circle(0, 0, 18, 0x2a1f2f, 0.9).setStrokeStyle(1, 0x8c6a36);
-      const lbl = this.add.text(0, 0, label, { fontFamily: "sans-serif", fontSize: "18px", color: "#f0e7c8" }).setOrigin(0.5);
+    // Place zoom buttons on the LEFT side, vertically centered, so they
+    // don't fight the right-side HUD/order list. Larger touch radius for
+    // mobile.
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const r = isMobile ? 24 : 20;
+    const baseR = isMobile ? 64 : 54;
+    const stickX = baseR + 22;
+    const make = (offsetX: number, y: number, label: string, fn: () => void) => {
+      const c = this.add.container(stickX + offsetX, y);
+      const bg = this.add.circle(0, 0, r, 0x1a1018, 0.95).setStrokeStyle(2, 0xc9a14a, 0.95);
+      const lbl = this.add.text(0, -1, label, { fontFamily: "serif", fontSize: `${r + 4}px`, color: "#f5e7bc", fontStyle: "bold" }).setOrigin(0.5);
       c.add([bg, lbl]);
       bg.setInteractive({ useHandCursor: true }).on("pointerup", fn);
       return { c, bg, lbl };
     };
-    const plus = make(170, "+", () => this.game_.zoomIn());
-    const minus = make(210, "−", () => this.game_.zoomOut());
+    // Position above the virtual stick (left bottom)
+    const baseY = this.scale.height - baseR - 22 - baseR - 24;
+    const plus = make(-r - 6, baseY, "+", () => this.game_.zoomIn());
+    const minus = make(r + 6, baseY, "−", () => this.game_.zoomOut());
     this.scale.on("resize", () => {
-      plus.c.setPosition(this.scale.width - 30, 170);
-      minus.c.setPosition(this.scale.width - 30, 210);
+      const newY = this.scale.height - baseR - 22 - baseR - 24;
+      plus.c.setPosition(stickX - r - 6, newY);
+      minus.c.setPosition(stickX + r + 6, newY);
     });
   }
 

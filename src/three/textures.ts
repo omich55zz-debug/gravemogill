@@ -18,7 +18,12 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement {
 function wrap(tex: THREE.CanvasTexture, repeat = 1): THREE.CanvasTexture {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
-  tex.anisotropy = 8;
+  // Anisotropy is the cheapest way to keep textures crisp at oblique angles
+  // (e.g. grass at the horizon). Crank it as high as the GPU allows.
+  tex.anisotropy = 16;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }

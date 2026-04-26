@@ -80,8 +80,17 @@ export class ThreeWorld {
     // whole cemetery block is visible but still atmospheric.
     this.scene.fog = new THREE.Fog(0x0a0f18, 22, 70);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Detect mobile / low-power devices: cap pixel ratio more aggressively and
+    // disable antialiasing (relying on browser's MSAA fallback / FXAA-by-DPR).
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const dpr = window.devicePixelRatio || 1;
+    const pixelCap = isMobile ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !isMobile,
+      alpha: false,
+      powerPreference: "high-performance",
+    });
+    this.renderer.setPixelRatio(pixelCap);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
