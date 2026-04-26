@@ -11,7 +11,10 @@ export const CONFIG = {
   ISO_W: 32,
   ISO_H: 32,
   // Day length (ms) — one in-game day.
-  DAY_MS: 90_000,
+  // The 16 waking game-hours (08:00 → 24:00) are mapped across this window;
+  // night begins at 22:00 (= 14 hrs after dawn). Calibrated so dawn → night
+  // is ~25 minutes of real time: DAY_MS * 14/16 ≈ 25 min ⇒ DAY_MS ≈ 28.6 min.
+  DAY_MS: 1_714_000,
   STARTING_MONEY: 400,
   // Cost to dig a plot (consumable like tool wear + effort).
   DIG_COST: 10,
