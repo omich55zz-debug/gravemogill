@@ -11,7 +11,8 @@ import {
   decorBonePile, decorSkull, decorLanternPole, decorStoneUrn,
   decorDirtMound, decorCrossStake, decorPumpkin,
   decorStoneBench, decorWeepingAngel, decorFountain,
-  entityPlayer, entityCat, entityZombie, graveHole,
+  entityPlayer, entityCat, entityZombie, entityVillager, graveHole,
+  type VillagerVariant,
   tree, grassClump, pond, raven,
 } from "./meshes";
 import {
@@ -939,6 +940,12 @@ export class ThreeWorld {
 
   addZombieMesh(variant: "normal" | "skinny" | "fat" | "headless" = "normal"): THREE.Object3D {
     const m = entityZombie(variant);
+    this.scene.add(m);
+    return m;
+  }
+
+  addVillagerMesh(variant: VillagerVariant = "peasant"): THREE.Object3D {
+    const m = entityVillager(variant);
     this.scene.add(m);
     return m;
   }

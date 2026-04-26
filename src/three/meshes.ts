@@ -1270,15 +1270,24 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
   const hoodStyle   = spec?.hoodStyle   ?? "down";
 
   const g = new THREE.Group();
-  // Boots (leather)
+  // Articulated legs — each leg is a pivot at the hip with a thigh + boot
+  // child so we can drive a walk-cycle from the update loop.
   const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.85 });
-  const bootsGeo = new THREE.BoxGeometry(0.16, 0.1, 0.2);
-  const bL = mkMesh(bootsGeo, bootMat);
-  bL.position.set(-0.11, 0.05, 0);
-  g.add(bL);
-  const bR = mkMesh(bootsGeo, bootMat);
-  bR.position.set(0.11, 0.05, 0);
-  g.add(bR);
+  const trousMat = new THREE.MeshStandardMaterial({ color: 0x2a1f1a, roughness: 0.9 });
+  const buildLeg = (sign: 1 | -1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sign * 0.11, 0.4, 0);
+    const thigh = mkMesh(new THREE.CylinderGeometry(0.07, 0.06, 0.32, 6), trousMat);
+    thigh.position.y = -0.16;
+    pivot.add(thigh);
+    const boot = mkMesh(new THREE.BoxGeometry(0.16, 0.1, 0.2), bootMat);
+    boot.position.y = -0.36;
+    pivot.add(boot);
+    g.add(pivot);
+    return pivot;
+  };
+  const legL = buildLeg(-1);
+  const legR = buildLeg(1);
 
   // Long flowing robe — deep purple-black with subtle sheen.
   const robeMat = new THREE.MeshStandardMaterial({
@@ -1467,7 +1476,7 @@ export function entityPlayer(spec?: PlayerLook): THREE.Group {
   g.add(halo);
 
   // Expose animatable parts so the GameScene update loop can drive them.
-  (g.userData as any).parts = { armL, armR, capePivot, orb, halo };
+  (g.userData as any).parts = { armL, armR, legL, legR, capePivot, orb, halo };
 
   return g;
 }
@@ -1674,6 +1683,155 @@ export function entityZombie(variant: "normal" | "skinny" | "fat" | "headless" =
     g.add(eR);
   }
   (g.userData as any).parts = { armL, armR };
+  return g;
+}
+
+/**
+ * Wandering villagers / mourners that walk the cemetery paths.
+ * Variants pick clothing color + headgear so the cast feels varied.
+ */
+export type VillagerVariant = "monk" | "peasant" | "mourner" | "ghost";
+
+export function entityVillager(variant: VillagerVariant = "peasant"): THREE.Group {
+  const g = new THREE.Group();
+  // Per-variant palette
+  let bodyColor = 0x4a3422;
+  let trimColor = 0x8c6a2a;
+  let skinColor = 0xe8c8a4;
+  let isGhost = false;
+  switch (variant) {
+    case "monk":
+      bodyColor = 0x2a1c12; trimColor = 0x553a14; skinColor = 0xe2c8a4; break;
+    case "peasant":
+      bodyColor = 0x6a4a26; trimColor = 0x3a2814; skinColor = 0xe8c8a0; break;
+    case "mourner":
+      bodyColor = 0x141016; trimColor = 0x4a2a30; skinColor = 0xddc6b0; break;
+    case "ghost":
+      bodyColor = 0xc8e0f0; trimColor = 0xa8c8e0; skinColor = 0xddeaf0;
+      isGhost = true; break;
+  }
+  const opt = isGhost
+    ? { transparent: true, opacity: 0.55 }
+    : {};
+
+  const robeMat = new THREE.MeshStandardMaterial({
+    color: bodyColor, roughness: 0.85, ...opt,
+    emissive: isGhost ? 0x4080a0 : 0x000000,
+    emissiveIntensity: isGhost ? 0.35 : 0,
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: trimColor, roughness: 0.7, ...opt,
+  });
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: skinColor, roughness: 0.8, ...opt,
+  });
+  const bootMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1008, roughness: 0.85, ...opt,
+  });
+
+  // Articulated legs (hip pivots for walk-cycle)
+  const buildLeg = (sign: 1 | -1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sign * 0.09, 0.35, 0);
+    const leg = mkMesh(new THREE.CylinderGeometry(0.06, 0.06, 0.32, 6), robeMat);
+    leg.position.y = -0.16;
+    pivot.add(leg);
+    if (!isGhost) {
+      const boot = mkMesh(new THREE.BoxGeometry(0.13, 0.08, 0.18), bootMat);
+      boot.position.y = -0.36;
+      pivot.add(boot);
+    }
+    g.add(pivot);
+    return pivot;
+  };
+  const legL = buildLeg(-1);
+  const legR = buildLeg(1);
+
+  // Robe / body — cylinder
+  const robeLower = mkMesh(new THREE.CylinderGeometry(0.26, 0.34, 0.65, 10), robeMat);
+  robeLower.position.y = 0.4;
+  g.add(robeLower);
+  const robeUpper = mkMesh(new THREE.CylinderGeometry(0.22, 0.26, 0.28, 10), robeMat);
+  robeUpper.position.y = 0.86;
+  g.add(robeUpper);
+
+  // Belt (peasant + mourner)
+  if (variant !== "ghost" && variant !== "monk") {
+    const belt = mkMesh(new THREE.CylinderGeometry(0.27, 0.27, 0.05, 12), trimMat);
+    belt.position.y = 0.7;
+    g.add(belt);
+  }
+
+  // Articulated arms
+  const buildArm = (sign: 1 | -1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sign * 0.24, 0.95, 0);
+    const sleeve = mkMesh(new THREE.CylinderGeometry(0.05, 0.06, 0.42, 6), robeMat);
+    sleeve.position.y = -0.21;
+    pivot.add(sleeve);
+    const hand = mkMesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
+    hand.position.y = -0.45;
+    pivot.add(hand);
+    g.add(pivot);
+    return pivot;
+  };
+  const armL = buildArm(-1);
+  const armR = buildArm(1);
+
+  // Head
+  const head = mkMesh(new THREE.SphereGeometry(0.14, 12, 10), skinMat);
+  head.position.y = 1.16;
+  g.add(head);
+
+  // Headgear / hood
+  if (variant === "monk") {
+    const hood = mkMesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), robeMat);
+    hood.position.y = 1.21;
+    g.add(hood);
+    const hoodBack = mkMesh(new THREE.ConeGeometry(0.13, 0.32, 8), robeMat);
+    hoodBack.position.set(0, 1.05, -0.16);
+    hoodBack.rotation.x = -0.3;
+    g.add(hoodBack);
+  } else if (variant === "peasant") {
+    const hat = mkMesh(new THREE.ConeGeometry(0.18, 0.16, 12), trimMat);
+    hat.position.y = 1.32;
+    g.add(hat);
+    const brim = mkMesh(new THREE.CylinderGeometry(0.22, 0.22, 0.025, 14), trimMat);
+    brim.position.y = 1.24;
+    g.add(brim);
+  } else if (variant === "mourner") {
+    // Black mourning veil
+    const veil = mkMesh(new THREE.SphereGeometry(0.18, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x141014, roughness: 0.95 }));
+    veil.position.y = 1.22;
+    g.add(veil);
+    const veilTrail = mkMesh(new THREE.PlaneGeometry(0.36, 0.46),
+      new THREE.MeshStandardMaterial({ color: 0x141014, roughness: 0.95, side: THREE.DoubleSide }));
+    veilTrail.position.set(0, 0.95, -0.12);
+    veilTrail.rotation.x = 0.05;
+    g.add(veilTrail);
+  } else if (variant === "ghost") {
+    // Transparent wisp tail trailing below the body — short & narrow.
+    const tail = mkMesh(new THREE.ConeGeometry(0.28, 0.4, 12, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0xc8e0f0, transparent: true, opacity: 0.35,
+        emissive: 0x4080a0, emissiveIntensity: 0.4, side: THREE.DoubleSide,
+      }));
+    tail.position.y = 0.1;
+    tail.rotation.x = Math.PI;
+    g.add(tail);
+    // Glowing eyes
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x80c0ff, emissive: 0x4080c0, emissiveIntensity: 1.5,
+    });
+    for (const sx of [-1, 1]) {
+      const eye = mkMesh(new THREE.SphereGeometry(0.022, 6, 5), eyeMat);
+      eye.position.set(sx * 0.05, 1.18, 0.12);
+      g.add(eye);
+    }
+  }
+
+  (g.userData as any).parts = { armL, armR, legL, legR, isGhost };
   return g;
 }
 

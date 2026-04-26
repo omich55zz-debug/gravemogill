@@ -17,6 +17,25 @@ import { buildings, tiersFor, type BuildingKind, type BuildingSlot } from "../sy
 import { Weather, pickWeather, type WeatherKind } from "../systems/Weather";
 import { shop } from "../systems/Shop";
 import { ThreeWorld } from "../three/ThreeWorld";
+import type { VillagerVariant } from "../three/meshes";
+
+/** Wandering villager NPC: walks between random grass tiles. */
+interface Villager {
+  variant: VillagerVariant;
+  /** Phaser-space position (kept here, not as a sprite). */
+  x: number; y: number;
+  /** Current target tile (Phaser coords). */
+  tx: number; ty: number;
+  /** Heading (yaw) in radians, smoothed each frame. */
+  yaw: number;
+  /** Movement speed (px/sec). */
+  speed: number;
+  /** Pause timer when arriving at a target (sec). */
+  idle: number;
+  /** Random walk-cycle phase offset so they don't sync. */
+  phase: number;
+  mesh: THREE.Object3D;
+}
 
 interface DecorationInstance {
   item: CatalogItem;
@@ -63,6 +82,8 @@ export class GameScene extends Phaser.Scene {
   private _animT = 0;
   private _catLastX = 0;
   private _catLastZ = 0;
+  /** Wandering NPCs that walk between random grass tiles. */
+  private villagers: Villager[] = [];
 
   // Highlight for the "focused" tile in front of the player
   focusRect!: Phaser.GameObjects.Graphics;
@@ -157,6 +178,8 @@ export class GameScene extends Phaser.Scene {
     this.cat.sprite.setAlpha(0);
     if (this.cat.shadow) this.cat.shadow.setAlpha(0);
     this.cat.mesh3D = this.three.addCatMesh();
+
+    this.spawnVillagers();
 
     // Camera follow is handled by ThreeWorld (orbit around the player).
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
@@ -336,18 +359,21 @@ export class GameScene extends Phaser.Scene {
       this.player.mesh3D.rotation.z = sway;
       this.player.mesh3D.visible = true;
       this.three.setPlayerYaw(this.player.facingYaw);
-      // Animate sub-parts: arms swing opposite phases, cape lags movement.
+      // Animate sub-parts: arms / legs swing opposite phases, cape lags.
       const parts = (this.player.mesh3D.userData as any).parts;
       if (parts) {
-        const armSwing = walking ? Math.sin(at * 9) * 0.6 * stickMag : Math.sin(at * 1.4) * 0.05;
+        const cycle = walking ? Math.sin(at * 9) * stickMag : Math.sin(at * 1.4) * 0.05;
+        const armSwing = cycle * 0.6;
+        const legSwing = cycle * 0.5;
         if (parts.armL) parts.armL.rotation.x = armSwing;
         if (parts.armR) parts.armR.rotation.x = -armSwing;
+        if (parts.legL) parts.legL.rotation.x = -legSwing;
+        if (parts.legR) parts.legR.rotation.x = legSwing;
         if (parts.capePivot) {
           const capeLift = walking ? -0.25 * stickMag - Math.abs(Math.sin(at * 4.5)) * 0.1 : 0;
           parts.capePivot.rotation.x = capeLift;
           parts.capePivot.rotation.z = Math.sin(at * 3.2) * 0.05;
         }
-        // Orb breathes (scale pulse) — magic feel.
         const pulse = 1 + Math.sin(at * 3.5) * 0.06;
         if (parts.orb) parts.orb.scale.setScalar(pulse);
         if (parts.halo) parts.halo.scale.setScalar(1 + Math.sin(at * 2.7) * 0.12);
@@ -393,6 +419,8 @@ export class GameScene extends Phaser.Scene {
         if (parts.armR) parts.armR.rotation.x = -1.0 + Math.sin(at * 2 + phase + 0.7) * 0.18 + tremor * 0.15;
       }
     }
+    // Wandering villagers: AI + walk-cycle.
+    this.updateVillagers(dt, at);
     // Center the orbit camera on the player.
     const op = this.three.phaserToThree(this.player.x, this.player.y);
     this.three.setOrbitTarget(op.x, op.z);
@@ -476,6 +504,114 @@ export class GameScene extends Phaser.Scene {
     const cell = this.grid.at(col, row);
     if (!cell) return;
     this.tileSprites[row][col].setTexture(this.terrainKey(cell));
+  }
+
+  // ===== Villager NPCs =====
+
+  /**
+   * Spawn a small cast of wandering villagers across the cemetery's
+   * grass tiles. They walk to random targets, idle briefly, repeat.
+   */
+  private spawnVillagers() {
+    const variants: VillagerVariant[] = ["monk", "peasant", "peasant", "mourner", "mourner", "ghost"];
+    const candidates: Array<{ c: number; r: number }> = [];
+    for (let r = 0; r < CONFIG.ROWS; r++) {
+      for (let c = 0; c < CONFIG.COLS; c++) {
+        const cell = this.grid.cells[r][c];
+        if (cell.terrain === "grass") candidates.push({ c, r });
+      }
+    }
+    if (candidates.length === 0) return;
+    for (const variant of variants) {
+      const start = candidates[(Math.random() * candidates.length) | 0];
+      const target = candidates[(Math.random() * candidates.length) | 0];
+      const sw = this.grid.tileToWorldCenter(start.c, start.r);
+      const tw = this.grid.tileToWorldCenter(target.c, target.r);
+      const mesh = this.three.addVillagerMesh(variant);
+      this.villagers.push({
+        variant,
+        x: sw.x, y: sw.y,
+        tx: tw.x, ty: tw.y,
+        yaw: 0,
+        speed: variant === "ghost" ? 28 : 22 + Math.random() * 12,
+        idle: 0,
+        phase: Math.random() * Math.PI * 2,
+        mesh,
+      });
+    }
+  }
+
+  /** Per-frame villager AI + animation. dt in seconds. */
+  private updateVillagers(dt: number, at: number) {
+    if (this.villagers.length === 0) return;
+    for (const v of this.villagers) {
+      // Pause at destination
+      if (v.idle > 0) {
+        v.idle -= dt;
+        // Idle animation: subtle breathing only, legs/arms relaxed.
+        const parts = (v.mesh.userData as any).parts;
+        if (parts) {
+          const c = Math.sin(at * 1.4 + v.phase) * 0.05;
+          if (parts.armL) parts.armL.rotation.x = c;
+          if (parts.armR) parts.armR.rotation.x = -c;
+          if (parts.legL) parts.legL.rotation.x = 0;
+          if (parts.legR) parts.legR.rotation.x = 0;
+        }
+        const p = this.three.phaserToThree(v.x, v.y);
+        const yBob = parts?.isGhost
+          ? 0.3 + Math.sin(at * 1.5 + v.phase) * 0.1
+          : Math.sin(at * 1.6 + v.phase) * 0.018;
+        v.mesh.position.set(p.x, yBob, p.z);
+        v.mesh.rotation.y = v.yaw;
+        continue;
+      }
+      // Walk toward target
+      const dx = v.tx - v.x;
+      const dy = v.ty - v.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 6) {
+        // Arrived — pick a new target & idle for a beat.
+        v.idle = 0.6 + Math.random() * 1.4;
+        // Pick a tile within reasonable range so they don't teleport.
+        for (let tries = 0; tries < 8; tries++) {
+          const c = (Math.random() * CONFIG.COLS) | 0;
+          const r = (Math.random() * CONFIG.ROWS) | 0;
+          if (this.grid.cells[r][c].terrain !== "grass") continue;
+          const w = this.grid.tileToWorldCenter(c, r);
+          v.tx = w.x; v.ty = w.y;
+          break;
+        }
+        continue;
+      }
+      const ang = Math.atan2(dy, dx);
+      // Smoothly rotate toward heading.
+      const targetYaw = -ang - Math.PI / 2;
+      const dYaw = ((targetYaw - v.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      v.yaw += dYaw * Math.min(1, dt * 6);
+      const step = v.speed * dt;
+      v.x += (dx / dist) * step;
+      v.y += (dy / dist) * step;
+
+      // Sync to mesh
+      const p = this.three.phaserToThree(v.x, v.y);
+      const parts = (v.mesh.userData as any).parts;
+      const isGhost = parts?.isGhost;
+      const baseY = isGhost
+        ? 0.4 + Math.sin(at * 1.8 + v.phase) * 0.12
+        : Math.abs(Math.sin(at * 7.5 + v.phase)) * 0.04;
+      v.mesh.position.set(p.x, baseY, p.z);
+      v.mesh.rotation.y = v.yaw;
+      if (parts) {
+        const cycle = Math.sin(at * 7.5 + v.phase);
+        const arm = cycle * 0.55;
+        const leg = cycle * 0.55;
+        if (parts.armL) parts.armL.rotation.x = arm;
+        if (parts.armR) parts.armR.rotation.x = -arm;
+        // Ghosts don't really walk — sway in place.
+        if (parts.legL) parts.legL.rotation.x = isGhost ? 0 : -leg;
+        if (parts.legR) parts.legR.rotation.x = isGhost ? 0 : leg;
+      }
+    }
   }
 
   // ===== Actions =====
