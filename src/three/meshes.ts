@@ -104,18 +104,59 @@ function mkMesh(geo: THREE.BufferGeometry, mat: THREE.Material, castShadow = tru
   return m;
 }
 
+// ---------------- Cached primitive geometries ----------------
+//
+// Procedural meshes are spawned every time a tombstone, fence, or decor is
+// placed. Allocating a fresh BufferGeometry per spawn produces hundreds of
+// duplicate GPU buffers. The factories below memoise by signature so 30
+// `tombStone()` calls share three buffers instead of producing 90.
+//
+// Safe because we never mutate vertex attributes after construction; only
+// the parent Mesh's transform is modified per instance.
+const _geoCache = new Map<string, THREE.BufferGeometry>();
+function gBox(w: number, h: number, d: number): THREE.BoxGeometry {
+  const k = `b:${w}:${h}:${d}`;
+  let g = _geoCache.get(k);
+  if (!g) { g = new THREE.BoxGeometry(w, h, d); _geoCache.set(k, g); }
+  return g as THREE.BoxGeometry;
+}
+function gCyl(rt: number, rb: number, h: number, seg = 12, hSeg = 1): THREE.CylinderGeometry {
+  const k = `c:${rt}:${rb}:${h}:${seg}:${hSeg}`;
+  let g = _geoCache.get(k);
+  if (!g) { g = new THREE.CylinderGeometry(rt, rb, h, seg, hSeg); _geoCache.set(k, g); }
+  return g as THREE.CylinderGeometry;
+}
+function gSph(r: number, ws = 10, hs = 8): THREE.SphereGeometry {
+  const k = `s:${r}:${ws}:${hs}`;
+  let g = _geoCache.get(k);
+  if (!g) { g = new THREE.SphereGeometry(r, ws, hs); _geoCache.set(k, g); }
+  return g as THREE.SphereGeometry;
+}
+function gCone(r: number, h: number, seg = 8): THREE.ConeGeometry {
+  const k = `co:${r}:${h}:${seg}`;
+  let g = _geoCache.get(k);
+  if (!g) { g = new THREE.ConeGeometry(r, h, seg); _geoCache.set(k, g); }
+  return g as THREE.ConeGeometry;
+}
+function gTor(r: number, t: number, rs = 6, ts = 16): THREE.TorusGeometry {
+  const k = `t:${r}:${t}:${rs}:${ts}`;
+  let g = _geoCache.get(k);
+  if (!g) { g = new THREE.TorusGeometry(r, t, rs, ts); _geoCache.set(k, g); }
+  return g as THREE.TorusGeometry;
+}
+
 // ---------------- Tombstones ----------------
 
 export function tombStone(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.85, 0.2, 0.35), stoneB);
+  const base = mkMesh(gBox(0.85, 0.2, 0.35), stoneB);
   base.position.y = 0.1;
   g.add(base);
-  const body = mkMesh(new THREE.BoxGeometry(0.7, 0.9, 0.18), stoneA);
+  const body = mkMesh(gBox(0.7, 0.9, 0.18), stoneA);
   body.position.y = 0.65;
   g.add(body);
   // Rounded top
-  const top = mkMesh(new THREE.CylinderGeometry(0.35, 0.35, 0.18, 12, 1, false, 0, Math.PI), stoneA);
+  const top = mkMesh(gCyl(0.35, 0.35, 0.18, 12), stoneA);
   top.rotation.x = Math.PI / 2;
   top.rotation.z = Math.PI / 2;
   top.position.set(0, 1.1, 0);
@@ -126,13 +167,13 @@ export function tombStone(): THREE.Group {
 
 export function tombObelisk(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.7, 0.25, 0.7), stoneB);
+  const base = mkMesh(gBox(0.7, 0.25, 0.7), stoneB);
   base.position.y = 0.125;
   g.add(base);
-  const shaft = mkMesh(new THREE.BoxGeometry(0.45, 1.4, 0.45), stoneA);
+  const shaft = mkMesh(gBox(0.45, 1.4, 0.45), stoneA);
   shaft.position.y = 0.95;
   g.add(shaft);
-  const cap = mkMesh(new THREE.ConeGeometry(0.32, 0.45, 4), stoneA);
+  const cap = mkMesh(gCone(0.32, 0.45, 4), stoneA);
   cap.rotation.y = Math.PI / 4;
   cap.position.y = 1.9;
   g.add(cap);
@@ -141,13 +182,13 @@ export function tombObelisk(): THREE.Group {
 
 export function tombCross(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), stoneB);
+  const base = mkMesh(gBox(0.8, 0.2, 0.4), stoneB);
   base.position.y = 0.1;
   g.add(base);
-  const vert = mkMesh(new THREE.BoxGeometry(0.18, 1.2, 0.18), granite);
+  const vert = mkMesh(gBox(0.18, 1.2, 0.18), granite);
   vert.position.y = 0.8;
   g.add(vert);
-  const horiz = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.16), granite);
+  const horiz = mkMesh(gBox(0.8, 0.2, 0.16), granite);
   horiz.position.y = 1.05;
   g.add(horiz);
   return g;
@@ -155,13 +196,13 @@ export function tombCross(): THREE.Group {
 
 export function tombMarble(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(1.0, 0.25, 0.5), stoneB);
+  const base = mkMesh(gBox(1.0, 0.25, 0.5), stoneB);
   base.position.y = 0.125;
   g.add(base);
-  const body = mkMesh(new THREE.BoxGeometry(0.85, 1.1, 0.25), marble);
+  const body = mkMesh(gBox(0.85, 1.1, 0.25), marble);
   body.position.y = 0.8;
   g.add(body);
-  const top = mkMesh(new THREE.BoxGeometry(0.9, 0.15, 0.3), marble);
+  const top = mkMesh(gBox(0.9, 0.15, 0.3), marble);
   top.position.y = 1.4;
   g.add(top);
   // Glowing arcane runes on the front face
@@ -184,19 +225,19 @@ export function tombMarble(): THREE.Group {
 
 export function tombAngel(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.8, 0.3, 0.6), stoneB);
+  const base = mkMesh(gBox(0.8, 0.3, 0.6), stoneB);
   base.position.y = 0.15;
   g.add(base);
   // Body
-  const body = mkMesh(new THREE.CylinderGeometry(0.22, 0.28, 0.8, 8), marble);
+  const body = mkMesh(gCyl(0.22, 0.28, 0.8, 8), marble);
   body.position.y = 0.7;
   g.add(body);
   // Head
-  const head = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), marble);
+  const head = mkMesh(gSph(0.18, 10, 8), marble);
   head.position.y = 1.25;
   g.add(head);
-  // Wings
-  const wingGeo = new THREE.BoxGeometry(0.05, 0.5, 0.4);
+  // Wings (shared geometry across both wings)
+  const wingGeo = gBox(0.05, 0.5, 0.4);
   const wingL = mkMesh(wingGeo, marble);
   wingL.position.set(-0.2, 0.95, 0);
   wingL.rotation.z = 0.3;
@@ -210,16 +251,16 @@ export function tombAngel(): THREE.Group {
 
 export function tombCeltic(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), stoneB);
+  const base = mkMesh(gBox(0.8, 0.2, 0.4), stoneB);
   base.position.y = 0.1;
   g.add(base);
-  const vert = mkMesh(new THREE.BoxGeometry(0.2, 1.3, 0.2), stoneA);
+  const vert = mkMesh(gBox(0.2, 1.3, 0.2), stoneA);
   vert.position.y = 0.85;
   g.add(vert);
-  const horiz = mkMesh(new THREE.BoxGeometry(0.85, 0.2, 0.18), stoneA);
+  const horiz = mkMesh(gBox(0.85, 0.2, 0.18), stoneA);
   horiz.position.y = 1.05;
   g.add(horiz);
-  const ring = mkMesh(new THREE.TorusGeometry(0.28, 0.065, 6, 20), stoneA);
+  const ring = mkMesh(gTor(0.28, 0.065, 6, 20), stoneA);
   ring.position.y = 1.05;
   ring.rotation.y = Math.PI / 2;
   g.add(ring);
@@ -228,10 +269,10 @@ export function tombCeltic(): THREE.Group {
 
 export function tombWood(): THREE.Group {
   const g = new THREE.Group();
-  const vert = mkMesh(new THREE.BoxGeometry(0.14, 0.9, 0.14), wood);
+  const vert = mkMesh(gBox(0.14, 0.9, 0.14), wood);
   vert.position.y = 0.45;
   g.add(vert);
-  const horiz = mkMesh(new THREE.BoxGeometry(0.55, 0.12, 0.12), wood);
+  const horiz = mkMesh(gBox(0.55, 0.12, 0.12), wood);
   horiz.position.y = 0.65;
   g.add(horiz);
   return g;
@@ -239,14 +280,14 @@ export function tombWood(): THREE.Group {
 
 export function tombSarco(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(1.6, 0.35, 0.8), stoneB);
+  const base = mkMesh(gBox(1.6, 0.35, 0.8), stoneB);
   base.position.y = 0.175;
   g.add(base);
-  const lid = mkMesh(new THREE.BoxGeometry(1.5, 0.2, 0.7), stoneA);
+  const lid = mkMesh(gBox(1.5, 0.2, 0.7), stoneA);
   lid.position.y = 0.45;
   g.add(lid);
   // Slight slope
-  const top = mkMesh(new THREE.BoxGeometry(1.35, 0.15, 0.55), marble);
+  const top = mkMesh(gBox(1.35, 0.15, 0.55), marble);
   top.position.y = 0.625;
   g.add(top);
   return g;
@@ -254,15 +295,15 @@ export function tombSarco(): THREE.Group {
 
 export function tombBroken(): THREE.Group {
   const g = new THREE.Group();
-  const base = mkMesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), stoneB);
+  const base = mkMesh(gBox(0.8, 0.2, 0.4), stoneB);
   base.position.y = 0.1;
   g.add(base);
-  const body = mkMesh(new THREE.BoxGeometry(0.6, 0.5, 0.18), stoneDark);
+  const body = mkMesh(gBox(0.6, 0.5, 0.18), stoneDark);
   body.position.y = 0.45;
   body.rotation.z = 0.18;
   g.add(body);
   // Broken chunk on ground
-  const chunk = mkMesh(new THREE.BoxGeometry(0.3, 0.15, 0.2), stoneDark);
+  const chunk = mkMesh(gBox(0.3, 0.15, 0.2), stoneDark);
   chunk.position.set(0.35, 0.08, 0.1);
   chunk.rotation.y = 0.5;
   g.add(chunk);

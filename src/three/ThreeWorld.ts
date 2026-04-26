@@ -39,6 +39,8 @@ export function worldToTile(x: number, z: number): { col: number; row: number } 
 }
 
 export class ThreeWorld {
+  /** True when running on a phone / tablet — used to gate expensive features. */
+  isMobile = false;
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
@@ -92,8 +94,10 @@ export class ThreeWorld {
     // Detect mobile / low-power devices: cap pixel ratio more aggressively and
     // disable antialiasing (relying on browser's MSAA fallback / FXAA-by-DPR).
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    this.isMobile = isMobile;
     const dpr = window.devicePixelRatio || 1;
-    const pixelCap = isMobile ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+    // Stricter cap on mobile (was 1.5) for ~30% fragment-shader speedup.
+    const pixelCap = isMobile ? Math.min(dpr, 1.0) : Math.min(dpr, 2);
     this.renderer = new THREE.WebGLRenderer({
       antialias: !isMobile,
       alpha: false,
@@ -102,7 +106,8 @@ export class ThreeWorld {
     this.renderer.setPixelRatio(pixelCap);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Cheaper shadow filter on mobile.
+    this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
@@ -125,7 +130,9 @@ export class ThreeWorld {
     this.sun = new THREE.DirectionalLight(0xb8caff, 0.85);
     this.sun.position.set(-12, 28, -10);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    // 1024 on mobile (was 2048) — quartered shadow-map cost, barely visible.
+    const shadowRes = isMobile ? 1024 : 2048;
+    this.sun.shadow.mapSize.set(shadowRes, shadowRes);
     const s = 30;
     this.sun.shadow.camera.left = -s;
     this.sun.shadow.camera.right = s;
@@ -261,12 +268,17 @@ export class ThreeWorld {
     this.scene.add(pondObj);
 
     // Scatter warm flickering torches along the main path and at corners so
-    // the cemetery isn't pitch-black beyond the player's lantern reach.
-    const torchPositions: Array<[number, number]> = [
+    // the cemetery isn't pitch-black beyond the player's lantern reach. On
+    // mobile we halve the count — extra PointLights are expensive (each
+    // doubles fragment-shader work for nearby lit fragments).
+    const torchPositionsAll: Array<[number, number]> = [
       [0, 0], [5, 0], [-5, 0], [0, 5], [0, -5],
       [10, 6], [-10, 6], [10, -6], [-10, -6],
       [-14, 10], [14, 10], [-14, -10], [14, -10],
     ];
+    const torchPositions = this.isMobile
+      ? torchPositionsAll.filter((_, i) => i % 2 === 0)
+      : torchPositionsAll;
     for (const [dx, dz] of torchPositions) {
       this.addTorch(dx, 1.8, dz, 0xffa346, 1.4, 6.0);
     }
@@ -767,7 +779,8 @@ export class ThreeWorld {
 
   /** Build a small floating-firefly point cloud over the cemetery. */
   buildFireflies() {
-    const count = 60;
+    // Halve count on mobile to reduce per-frame attribute updates.
+    const count = this.isMobile ? 30 : 60;
     const positions = new Float32Array(count * 3);
     const data = new Float32Array(count * 4); // x0,z0,phase,radius
     for (let i = 0; i < count; i++) {
