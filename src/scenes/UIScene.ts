@@ -176,7 +176,7 @@ export class UIScene extends Phaser.Scene {
     make("⚙", () => this.openSettingsModal());
     make("🛒", () => this.openShopModal());
     // Chest button shows total owned chests as a small red badge.
-    const chest = make("⧉", () => this.openLootModal());
+    const chest = make("📦", () => this.openLootModal());
     const chestBadge = this.add.text(0, 0, "", {
       fontFamily: "sans-serif", fontSize: "11px", color: "#fff",
       backgroundColor: "#c0392b", padding: { left: 4, right: 4, top: 1, bottom: 1 },
@@ -1105,7 +1105,7 @@ export class UIScene extends Phaser.Scene {
   private openLootModal() {
     audio.play("click");
     this.openModal((c) => {
-      const title = this.add.text(0, -170, "⧉  Сундуки", {
+      const title = this.add.text(0, -170, "📦  Сундуки", {
         fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
       }).setOrigin(0.5);
       c.add(title);

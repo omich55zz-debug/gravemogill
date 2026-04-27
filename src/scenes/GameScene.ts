@@ -258,14 +258,14 @@ export class GameScene extends Phaser.Scene {
       // Chest drops: perfect orders get a 30% bronze drop.
       if (verdict === "perfect" && Math.random() < 0.3) {
         loot.grant("bronze");
-        this.showFloatText("⧉ Бронзовый сундук!", this.player.x, this.player.y - 44, "#e0a070");
+        this.showFloatText("📦 Бронзовый сундук!", this.player.x, this.player.y - 44, "#e0a070");
       }
       this.tryUnlock("first_complete");
       const n = progress.bump("ordersCompleted");
       // Every 5th completed order: silver chest guaranteed.
       if (n > 0 && n % 5 === 0) {
         loot.grant("silver");
-        this.showFloatText("⧉ Серебряный сундук!", this.player.x, this.player.y - 58, "#c9d4dc");
+        this.showFloatText("📦 Серебряный сундук!", this.player.x, this.player.y - 58, "#c9d4dc");
       }
       if (n >= 5) this.tryUnlock("five_graves");
       if (n >= 20) this.tryUnlock("twenty_graves");
@@ -310,7 +310,7 @@ export class GameScene extends Phaser.Scene {
       audio.play("rankUp");
       this.showFloatText(`Новый ранг: ${after.name}!`, this.player.x, this.player.y - 60, "#f4d27a");
       loot.grant("gold");
-      this.showFloatText("⧉ Золотой сундук!", this.player.x, this.player.y - 80, "#ffc45a");
+      this.showFloatText("📦 Золотой сундук!", this.player.x, this.player.y - 80, "#ffc45a");
     });
 
     if (this.shouldLoadSave) {
