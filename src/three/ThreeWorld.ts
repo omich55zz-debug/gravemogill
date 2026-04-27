@@ -220,7 +220,10 @@ export class ThreeWorld {
     // Trees — bias to the border of the map. Gothic mix: mostly gnarled
     // dead oaks, peppered with dark pines.
     const treeVariants: Array<"dead" | "pine"> = ["dead", "dead", "dead", "pine", "dead", "pine"];
-    for (let i = 0; i < 32; i++) {
+    // Mobile: half as many trees — each tree is a Group with ~15 child meshes,
+    // so 32 → 16 cuts ~240 draw calls.
+    const treeCount = this.isMobile ? 16 : 32;
+    for (let i = 0; i < treeCount; i++) {
       for (let tries = 0; tries < 30; tries++) {
         const onEdge = rnd() < 0.7;
         const c = onEdge
@@ -299,7 +302,9 @@ export class ThreeWorld {
     }
 
     // Scatter perched ravens on random grass tiles — silent gothic extras.
-    for (let i = 0; i < 9; i++) {
+    // Mobile gets a third (3 instead of 9): each raven Group has 4 meshes.
+    const ravenCount = this.isMobile ? 3 : 9;
+    for (let i = 0; i < ravenCount; i++) {
       const c = (rnd() * cols) | 0;
       const r = (rnd() * rows) | 0;
       if (!isGrass(c, r)) continue;
@@ -337,6 +342,11 @@ export class ThreeWorld {
       { make: gothicBell,         count: 1, rotate: true  },
       { make: familyTree,         count: 1, rotate: true  },
     ];
+    // Mobile: halve decor scatter counts — each decor Group is ~3-10 meshes.
+    // Keeps the scene interesting while cutting the draw-call budget.
+    if (this.isMobile) {
+      for (const s of decorSpecs) s.count = Math.max(1, Math.ceil(s.count * 0.5));
+    }
     for (const spec of decorSpecs) {
       let placed = 0, attempts = 0;
       while (placed < spec.count && attempts < spec.count * 8) {
@@ -995,8 +1005,11 @@ export class ThreeWorld {
     this.updateTorches(t);
     if (!this.isMobile || even) this.updateMist(t);
     if (!this.isMobile || even) this.updateRain(dt);
-    if (!this.isMobile || even) this.updateSway(t);
-    if (!this.isMobile || !even) this.updateFireflies(t);
+    // Tree sway is entirely cosmetic — skip on mobile. Saves 40 matrix
+    // composes per frame and removes one traversal of the swayingTrees list.
+    if (!this.isMobile) this.updateSway(t);
+    // Fireflies are disabled on mobile (no particle system to update).
+    if (!this.isMobile && !even) this.updateFireflies(t);
     this.updateCrow(t);
     this.renderer.render(this.scene, this.camera);
   }
