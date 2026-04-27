@@ -2,6 +2,23 @@
 
 export type ItemCategory = "tombstone" | "flower" | "fence" | "lantern" | "statue";
 
+/** Rarity of a catalog entry — also used as the tint of loot-box glow. */
+export type Rarity = "common" | "rare" | "epic" | "legendary";
+
+export const RARITY_COLORS: Record<Rarity, number> = {
+  common:    0xc8cfd6,
+  rare:      0x5a9dff,
+  epic:      0xb469ff,
+  legendary: 0xffb63a,
+};
+
+export const RARITY_NAMES: Record<Rarity, string> = {
+  common:    "Обычное",
+  rare:      "Редкое",
+  epic:      "Эпическое",
+  legendary: "Легендарное",
+};
+
 export interface CatalogItem {
   id: string;
   name: string;
@@ -10,6 +27,10 @@ export interface CatalogItem {
   luxury: number;
   // Key used by the sprite generator to draw the item.
   sprite: string;
+  /** Rarity — defaults to common for existing shop entries. */
+  rarity?: Rarity;
+  /** True if this item can only be obtained from loot boxes (not from shop). */
+  lootOnly?: boolean;
 }
 
 export const CATALOG: CatalogItem[] = [
@@ -18,10 +39,10 @@ export const CATALOG: CatalogItem[] = [
   { id: "stone_slab",      name: "Каменная плита",      category: "tombstone", cost: 80,  luxury: 15, sprite: "tomb_stone"       },
   { id: "celtic_cross",    name: "Кельтский крест",     category: "tombstone", cost: 130, luxury: 26, sprite: "tomb_celtic"      },
   { id: "broken_stone",    name: "Разбитый камень",     category: "tombstone", cost: 140, luxury: 28, sprite: "tomb_broken"      },
-  { id: "marble_stone",    name: "Мраморное надгробие", category: "tombstone", cost: 180, luxury: 35, sprite: "tomb_marble"      },
-  { id: "sarcophagus",     name: "Саркофаг",            category: "tombstone", cost: 260, luxury: 52, sprite: "tomb_sarcophagus" },
-  { id: "granite_obelisk", name: "Гранитный обелиск",   category: "tombstone", cost: 320, luxury: 65, sprite: "tomb_obelisk"     },
-  { id: "angel_headstone", name: "Ангельское надгробие",category: "tombstone", cost: 420, luxury: 82, sprite: "tomb_angel"       },
+  { id: "marble_stone",    name: "Мраморное надгробие", category: "tombstone", cost: 180, luxury: 35, sprite: "tomb_marble",      rarity: "rare" },
+  { id: "sarcophagus",     name: "Саркофаг",            category: "tombstone", cost: 260, luxury: 52, sprite: "tomb_sarcophagus", rarity: "rare" },
+  { id: "granite_obelisk", name: "Гранитный обелиск",   category: "tombstone", cost: 320, luxury: 65, sprite: "tomb_obelisk",     rarity: "epic" },
+  { id: "angel_headstone", name: "Ангельское надгробие",category: "tombstone", cost: 420, luxury: 82, sprite: "tomb_angel",       rarity: "epic" },
 
   // Flowers — small decor, stacks multiplicatively.
   { id: "daisy",    name: "Ромашки",  category: "flower", cost: 8,  luxury: 3,  sprite: "flower_white"  },
@@ -48,7 +69,21 @@ export const CATALOG: CatalogItem[] = [
 
   // Statues — centrepieces.
   { id: "angel_statue", name: "Статуя ангела", category: "statue", cost: 250, luxury: 55, sprite: "statue_angel" },
+
+  // ----- Loot-only exclusives -----
+  // Legendary: pulled from Gold chests almost exclusively. Much more luxurious
+  // than shop tier, priced as if they went on sale but can't be bought.
+  { id: "obsidian_cross",  name: "Обсидиановый крест", category: "tombstone", cost: 900,  luxury: 180, sprite: "tomb_obsidian", rarity: "legendary", lootOnly: true },
+  { id: "skull_throne",    name: "Трон из черепов",    category: "statue",    cost: 1200, luxury: 240, sprite: "statue_throne", rarity: "legendary", lootOnly: true },
+  { id: "phoenix_lantern", name: "Фонарь-феникс",      category: "lantern",   cost: 600,  luxury: 140, sprite: "lantern_phoenix", rarity: "legendary", lootOnly: true },
+  { id: "bone_fence",      name: "Костяная ограда",    category: "fence",     cost: 500,  luxury: 110, sprite: "fence_bone", rarity: "epic", lootOnly: true },
+  { id: "eternal_rose",    name: "Вечная роза",        category: "flower",    cost: 280,  luxury: 95,  sprite: "flower_eternal", rarity: "epic", lootOnly: true },
 ];
+
+/** Effective rarity for an item — common if not explicitly tagged. */
+export function rarityOf(item: CatalogItem): Rarity {
+  return item.rarity ?? "common";
+}
 
 export function itemById(id: string): CatalogItem | undefined {
   return CATALOG.find(i => i.id === id);

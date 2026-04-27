@@ -16,6 +16,7 @@ import {
   type VillagerVariant,
   tree, grassClump, pond, raven,
   well, willow, toadstools, brokenPillar, gargoyle, skyLantern,
+  stoneBridge, runicAltar, cagedRaven, gothicBell, familyTree,
 } from "./meshes";
 import {
   grassGroundTexture, stonePathTexture, earthTexture,
@@ -82,6 +83,8 @@ export class ThreeWorld {
   // Firefly particle system for nighttime ambient sparkle.
   private fireflies?: THREE.Points;
   private firefliesData?: Float32Array; // x,y,z,phase per particle
+  /** Current active season; mutated by setSeason. */
+  private season: "summer" | "autumn" | "winter" | "spring" = "summer";
 
   constructor(parent: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -321,6 +324,12 @@ export class ThreeWorld {
       { make: brokenPillar,       count: 3, rotate: true  },
       { make: gargoyle,           count: 2, rotate: true  },
       { make: skyLantern,         count: 5, rotate: true  },
+      // Batch 2 — rarer landmark props.
+      { make: stoneBridge,        count: 1, rotate: true  },
+      { make: runicAltar,         count: 1, rotate: true  },
+      { make: cagedRaven,         count: 2, rotate: true  },
+      { make: gothicBell,         count: 1, rotate: true  },
+      { make: familyTree,         count: 1, rotate: true  },
     ];
     for (const spec of decorSpecs) {
       let placed = 0, attempts = 0;
@@ -858,6 +867,61 @@ export class ThreeWorld {
       arr[i * 3 + 2] = z0 + Math.cos(T * 0.5 + ph * 1.3) * r;
     }
     pos.needsUpdate = true;
+  }
+
+  // ---------------- Seasons ----------------
+
+  /**
+   * Re-tint world materials for the given season. The weather system stays
+   * independent — clearing weather during winter still keeps leaves bare etc.
+   *
+   * Implementation: walk the swaying-tree list and adjust the darkest-green
+   * crown material hue; tint ground / ambient clear-colour via direct
+   * property writes (additive to setWeather).
+   */
+  setSeason(kind: "summer" | "autumn" | "winter" | "spring") {
+    if (this.season === kind) return;
+    this.season = kind;
+    const crownColor =
+      kind === "summer" ? 0x3b6c2a :
+      kind === "autumn" ? 0xc47520 :
+      kind === "winter" ? 0x4a5a6a :
+                          0x6ea43c; // spring (light)
+    const groundTint =
+      kind === "winter" ? 0xe6edf5 :   // snow wash
+      kind === "autumn" ? 0xc29258 :
+      kind === "spring" ? 0x82a85a :
+                          0x718b3d;    // summer vivid
+    // Tint tree crowns (the biggest visual cue).
+    for (const entry of this.swayingTrees) {
+      entry.obj.traverse(o => {
+        if ((o as THREE.Mesh).isMesh) {
+          const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          // Only recolour meshes that look like a leafy crown (green-ish base).
+          if (m && (m as any).color && typeof (m as any).color.getHex === "function") {
+            const hex = (m as any).color.getHex() as number;
+            // Heuristic: green crowns have G channel larger than R and B.
+            const r = (hex >> 16) & 0xff, g = (hex >> 8) & 0xff, b = hex & 0xff;
+            if (g > r && g > b && g > 0x40) {
+              (m as any).color.setHex(crownColor);
+            }
+          }
+        }
+      });
+    }
+    // Tint scene clear colour + fog subtly, without overriding weather-set far.
+    if (this.scene.background instanceof THREE.Color) {
+      const bg = this.scene.background as THREE.Color;
+      if (kind === "winter") bg.lerp(new THREE.Color(0xd8e0ec), 0.35);
+      else if (kind === "autumn") bg.lerp(new THREE.Color(0xc78a5a), 0.2);
+    }
+    // Remember for ambient effects — fireflies dim in winter etc.
+    (this as unknown as { _seasonGroundTint: number })._seasonGroundTint = groundTint;
+  }
+
+  /** Current season (for UI callbacks). */
+  currentSeason(): "summer" | "autumn" | "winter" | "spring" {
+    return this.season;
   }
 
   private _lastRenderTs = 0;

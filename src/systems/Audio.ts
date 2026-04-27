@@ -42,7 +42,13 @@ type SoundName =
   | "doorCreak"
   | "tombThud"
   | "coinRain"
-  | "heartbeat";
+  | "heartbeat"
+  | "chestBuy"
+  | "chestOpen"
+  | "lootCommon"
+  | "lootRare"
+  | "lootEpic"
+  | "lootLegendary";
 
 const PREFS_KEY = "gravemogill.audio.v1";
 interface AudioPrefs { master: number; sfx: number; music: number; muted: boolean; }
@@ -270,6 +276,34 @@ class AudioEngine {
       case "heartbeat":
         // Two thumps low-passed — danger ambient.
         this.heartBeat(ctx);
+        break;
+      case "chestBuy":
+        // Satisfying metallic click when purchasing a chest.
+        this.toneChain(ctx, [660, 990], [0.04, 0.08], "triangle", 0.18);
+        this.noiseHit(ctx, 0.1, 2800, 800, 0.08);
+        break;
+      case "chestOpen":
+        // Heavy lock unlatch + hinge creak + rush of magic.
+        this.noiseHit(ctx, 0.2, 900, 240, 0.22);
+        this.toneChain(ctx, [220, 330, 440, 660, 880], [0.05, 0.05, 0.06, 0.08, 0.18], "sawtooth", 0.2);
+        this.bellTone(ctx, 110, 1.2, 0.22);
+        break;
+      case "lootCommon":
+        this.toneChain(ctx, [880, 1100], [0.04, 0.1], "triangle", 0.16);
+        break;
+      case "lootRare":
+        this.toneChain(ctx, [660, 880, 1100], [0.05, 0.05, 0.12], "triangle", 0.2);
+        break;
+      case "lootEpic":
+        this.toneChain(ctx, [523, 784, 1046, 1319], [0.05, 0.05, 0.06, 0.16], "triangle", 0.22);
+        this.bellTone(ctx, 261, 0.8, 0.16);
+        break;
+      case "lootLegendary":
+        // Huge fanfare — triple tone + bell + sparkle.
+        this.toneChain(ctx, [392, 523, 659, 784, 1046, 1319, 1568], [0.07, 0.07, 0.07, 0.07, 0.09, 0.1, 0.26], "triangle", 0.32);
+        this.bellTone(ctx, 261, 1.6, 0.26);
+        this.bellTone(ctx, 523, 1.2, 0.18);
+        this.noiseHit(ctx, 0.4, 4000, 800, 0.08);
         break;
     }
   }

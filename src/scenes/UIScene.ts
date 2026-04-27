@@ -3,7 +3,9 @@ import type { GameScene } from "./GameScene";
 import type { Economy } from "../systems/Economy";
 import type { TimeSystem } from "../systems/TimeSystem";
 import type { OrderSystem, Order } from "../systems/OrderSystem";
-import { CATALOG, type ItemCategory } from "../data/catalog";
+import { CATALOG, type ItemCategory, RARITY_COLORS, RARITY_NAMES } from "../data/catalog";
+import { loot, CHEST_SPECS, type ChestTier, type Drop } from "../systems/Loot";
+import { seasonForDay, SEASON_NAMES_RU, SEASON_ICONS } from "../systems/Seasons";
 import type { Cell } from "../utils/grid";
 import { portraitKey } from "../utils/sprites";
 import { tutorial } from "../systems/Tutorial";
@@ -173,6 +175,22 @@ export class UIScene extends Phaser.Scene {
     });
     make("⚙", () => this.openSettingsModal());
     make("🛒", () => this.openShopModal());
+    // Chest button shows total owned chests as a small red badge.
+    const chest = make("⧉", () => this.openLootModal());
+    const chestBadge = this.add.text(0, 0, "", {
+      fontFamily: "sans-serif", fontSize: "11px", color: "#fff",
+      backgroundColor: "#c0392b", padding: { left: 4, right: 4, top: 1, bottom: 1 },
+    }).setOrigin(0.5).setDepth(9001);
+    const refreshChestBadge = () => {
+      const n = loot.total();
+      if (n <= 0) chestBadge.setVisible(false);
+      else {
+        chestBadge.setText(String(n)).setVisible(true);
+        chestBadge.setPosition(chest.circle.x + 16, chest.circle.y - 16);
+      }
+    };
+    refreshChestBadge();
+    loot.on("changed", refreshChestBadge);
     make("🏆", () => this.openAchievementsModal());
   }
 
@@ -285,7 +303,10 @@ export class UIScene extends Phaser.Scene {
     const phase = h >= 19 || h < 6 ? "☾" : h < 9 || h > 17 ? "◐" : "☀";
     const wname = weather ? (WEATHER_NAME_RU[weather.kind] ?? "") : "";
     const wicon = weather ? (WEATHER_ICON[weather.kind] ?? "") : "";
-    this.hudTime.setText(`${phase} ${this.gameTime.timeString()}  ·  ${wicon} ${wname}`);
+    const season = seasonForDay(this.gameTime.day);
+    this.hudTime.setText(
+      `${phase} ${this.gameTime.timeString()}  ·  ${wicon} ${wname}  ·  ${SEASON_ICONS[season]} ${SEASON_NAMES_RU[season]}`,
+    );
     this.refreshReputation();
   }
 
@@ -755,7 +776,8 @@ export class UIScene extends Phaser.Scene {
     this.openModal(c => {
       const title = this.add.text(0, -180, this.categoryTitle(category), { fontFamily: "serif", fontSize: "18px", color: "#f0e7c8" }).setOrigin(0.5);
       c.add(title);
-      const items = CATALOG.filter(i => i.category === category);
+      // Loot-only items never appear in the shop.
+      const items = CATALOG.filter(i => i.category === category && !i.lootOnly);
       let y = -140;
       for (const item of items) {
         const bg = this.add.rectangle(0, y, 400, 40, 0x2a1f2f, 0.95).setStrokeStyle(1, 0x8c6a36);
@@ -1075,6 +1097,205 @@ export class UIScene extends Phaser.Scene {
         }
       });
     });
+  }
+
+  // -------------- Loot box modal --------------
+
+  /** Lists all owned chests + lets the player buy a new one or open existing. */
+  private openLootModal() {
+    audio.play("click");
+    this.openModal((c) => {
+      const title = this.add.text(0, -170, "⧉  Сундуки", {
+        fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+      const subtitle = this.add.text(0, -148, "Открывай за награды — или купи сразу.", {
+        fontFamily: "serif", fontSize: "11px", color: "#9a8f72", fontStyle: "italic",
+      }).setOrigin(0.5);
+      c.add(subtitle);
+
+      const tiers: ChestTier[] = ["bronze", "silver", "gold"];
+      tiers.forEach((tier, idx) => {
+        const y = -110 + idx * 82;
+        const spec = CHEST_SPECS[tier];
+        const count = loot.count(tier);
+
+        // Card background with tier-tinted stroke.
+        const bg = this.add.rectangle(0, y, 500, 74, 0x19131e, 0.96)
+          .setStrokeStyle(2, spec.color);
+        c.add(bg);
+
+        // Chest icon (simple emoji proxy — 3D chest is in the open animation).
+        const ico = this.add.text(-230, y, "🎁", {
+          fontFamily: "sans-serif", fontSize: "34px",
+        }).setOrigin(0.5);
+        c.add(ico);
+
+        const nameLbl = this.add.text(-195, y - 18, spec.name, {
+          fontFamily: "serif", fontSize: "14px", color: "#f0e7c8", fontStyle: "bold",
+        }).setOrigin(0, 0.5);
+        c.add(nameLbl);
+
+        // Brief drop hint based on rarity weights.
+        const legendPct = Math.round(
+          (spec.weights.legendary / Object.values(spec.weights).reduce((a, b) => a + b, 0)) * 1000
+        ) / 10;
+        const hint = this.add.text(-195, y + 2, `Шанс Легендарки: ${legendPct}%  ·  3 предмета за раз`, {
+          fontFamily: "serif", fontSize: "11px", color: "#b5a676",
+        }).setOrigin(0, 0.5);
+        c.add(hint);
+
+        const ownedLbl = this.add.text(-195, y + 20, `У тебя: ${count}`, {
+          fontFamily: "serif", fontSize: "12px", color: count > 0 ? "#9ee07a" : "#7a7668",
+        }).setOrigin(0, 0.5);
+        c.add(ownedLbl);
+
+        // Right side: two buttons. Open (if owned) / Buy (always).
+        const openBtn = this.add.rectangle(160, y - 14, 96, 26, count > 0 ? 0x2a4d2a : 0x2a2a2a)
+          .setStrokeStyle(1, count > 0 ? 0x7fbf5f : 0x4a4a4a);
+        const openLbl = this.add.text(160, y - 14, count > 0 ? "Открыть" : "—", {
+          fontFamily: "serif", fontSize: "12px",
+          color: count > 0 ? "#e8f4d6" : "#6a6a72", fontStyle: count > 0 ? "bold" : "normal",
+        }).setOrigin(0.5);
+        c.add([openBtn, openLbl]);
+        if (count > 0) {
+          openBtn.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+            const drops = loot.open(tier);
+            if (!drops) return;
+            this.closeModal();
+            this.showChestOpenAnimation(tier, drops);
+          });
+        }
+
+        const buyBtn = this.add.rectangle(160, y + 14, 96, 26, 0x2a2112)
+          .setStrokeStyle(1, spec.color);
+        const buyLbl = this.add.text(160, y + 14, `Купить ${spec.cost}₽`, {
+          fontFamily: "serif", fontSize: "11px", color: "#f4d27a",
+        }).setOrigin(0.5);
+        c.add([buyBtn, buyLbl]);
+        buyBtn.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+          if (!this.economy.spend(spec.cost)) { audio.play("fail"); return; }
+          loot.grant(tier);
+          audio.play("chestBuy");
+          this.closeModal();
+          this.openLootModal();
+        });
+      });
+    });
+  }
+
+  /**
+   * Flashy opening animation — dark backdrop, glowing rune circle, chest
+   * pops in, drops float up one by one with rarity colour + tier-appropriate
+   * loot fanfare.
+   */
+  private showChestOpenAnimation(tier: ChestTier, drops: Drop[]) {
+    audio.play("chestOpen");
+    const spec = CHEST_SPECS[tier];
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+
+    const dim = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.72)
+      .setOrigin(0, 0).setDepth(11000).setInteractive();
+
+    // Rune circle — rotating stroked ring.
+    const rune = this.add.graphics().setDepth(11001);
+    rune.lineStyle(3, spec.color, 0.9);
+    rune.strokeCircle(cx, cy, 130);
+    rune.lineStyle(1, spec.color, 0.4);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      rune.strokeCircle(cx + Math.cos(a) * 130, cy + Math.sin(a) * 130, 4);
+    }
+    this.tweens.add({ targets: rune, angle: 360, duration: 4000, repeat: -1, ease: "Linear" });
+
+    // Chest glyph — emoji placeholder; springs in with overshoot.
+    const chestGlyph = this.add.text(cx, cy, "🎁", {
+      fontFamily: "sans-serif", fontSize: "72px",
+    }).setOrigin(0.5).setDepth(11002).setScale(0.1);
+    this.tweens.add({
+      targets: chestGlyph, scale: 1.2, duration: 340, ease: "Back.Out",
+      onComplete: () => {
+        this.tweens.add({ targets: chestGlyph, scale: 1.0, duration: 140, yoyo: false });
+      },
+    });
+
+    // After a beat, explode the chest away and reveal drops one by one.
+    this.time.delayedCall(800, () => {
+      this.tweens.add({
+        targets: chestGlyph, alpha: 0, scale: 2.4, duration: 280,
+        onComplete: () => chestGlyph.destroy(),
+      });
+      drops.forEach((drop, i) => {
+        this.time.delayedCall(320 + i * 380, () => {
+          this.showDropCard(cx, cy, drop, i);
+          // Rarity-tiered fanfare per card.
+          const tone: "lootCommon" | "lootRare" | "lootEpic" | "lootLegendary" =
+            drop.rarity === "legendary" ? "lootLegendary" :
+            drop.rarity === "epic"      ? "lootEpic"      :
+            drop.rarity === "rare"      ? "lootRare"      : "lootCommon";
+          audio.play(tone);
+        });
+      });
+    });
+
+    // Dismiss tap closes everything after drops have all shown.
+    this.time.delayedCall(320 + drops.length * 380 + 1600, () => {
+      dim.on("pointerup", () => {
+        dim.destroy();
+        rune.destroy();
+        this.children.getAll().forEach(o => {
+          if ((o as any).__dropCard) o.destroy();
+        });
+      });
+      // Auto-dismiss after another few seconds if untouched.
+      this.time.delayedCall(6000, () => {
+        if (dim.scene) {
+          dim.destroy();
+          rune.destroy();
+          this.children.getAll().forEach(o => {
+            if ((o as any).__dropCard) o.destroy();
+          });
+        }
+      });
+    });
+  }
+
+  private showDropCard(cx: number, cy: number, drop: Drop, slot: number) {
+    // 3 cards fan out around the chest center.
+    const angle = -Math.PI / 2 + (slot - 1) * 0.55;
+    const tx = cx + Math.cos(angle) * 160;
+    const ty = cy + Math.sin(angle) * 160;
+    const color = RARITY_COLORS[drop.rarity];
+
+    const card = this.add.container(cx, cy).setDepth(11100);
+    (card as any).__dropCard = true;
+
+    const bg = this.add.rectangle(0, 0, 140, 90, 0x140e18, 0.95).setStrokeStyle(3, color);
+    const icon = this.add.image(0, -18, drop.item.sprite).setScale(1.6);
+    const nm = this.add.text(0, 18, drop.item.name, {
+      fontFamily: "serif", fontSize: "11px", color: "#f0e7c8", align: "center",
+      wordWrap: { width: 130 },
+    }).setOrigin(0.5, 0);
+    const rl = this.add.text(0, 40, RARITY_NAMES[drop.rarity], {
+      fontFamily: "serif", fontSize: "10px", color: "#" + color.toString(16).padStart(6, "0"),
+      fontStyle: "bold",
+    }).setOrigin(0.5);
+    card.add([bg, icon, nm, rl]);
+    card.setScale(0.3).setAlpha(0);
+
+    // Arc-tween from center to target position with a glitchy shake for legendary.
+    this.tweens.add({
+      targets: card, x: tx, y: ty, scale: 1, alpha: 1,
+      duration: 420, ease: "Back.Out",
+    });
+    if (drop.rarity === "legendary") {
+      this.time.delayedCall(480, () => {
+        this.tweens.add({
+          targets: card, x: tx + 4, duration: 60, yoyo: true, repeat: 3,
+        });
+      });
+    }
   }
 
   // -------------- Achievements modal --------------

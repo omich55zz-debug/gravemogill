@@ -2461,3 +2461,228 @@ export function skyLantern(): THREE.Group {
   g.add(ring);
   return g;
 }
+
+// =============================================================================
+//                    EXTRA GOTHIC PROPS — BATCH 2
+// =============================================================================
+
+/** Arched stone bridge — five-segment arch, parapet walls, cobble deck. */
+export function stoneBridge(): THREE.Group {
+  const g = new THREE.Group();
+  // Arched deck built from 5 box segments tilted into an arc.
+  const deckLen = 4;
+  const seg = 5;
+  for (let i = 0; i < seg; i++) {
+    const t = i / (seg - 1) - 0.5;           // -0.5 … +0.5
+    const y = 0.5 + Math.cos(t * Math.PI) * 0.35;
+    const mesh = mkMesh(gBox(deckLen / seg + 0.02, 0.2, 1.4), stoneA);
+    mesh.position.set(t * deckLen, y, 0);
+    mesh.rotation.z = -Math.sin(t * Math.PI) * 0.22;
+    g.add(mesh);
+  }
+  // Parapet walls running along both sides.
+  const para = () => {
+    const wall = mkMesh(gBox(deckLen + 0.2, 0.28, 0.12), stoneB);
+    return wall;
+  };
+  const pl = para(); pl.position.set(0, 0.95, 0.62); g.add(pl);
+  const pr = para(); pr.position.set(0, 0.95, -0.62); g.add(pr);
+  // Pillars at both ends.
+  for (const [x, z] of [[-deckLen/2, 0.62],[deckLen/2,0.62],[-deckLen/2,-0.62],[deckLen/2,-0.62]] as const) {
+    const pil = mkMesh(gBox(0.22, 1.2, 0.22), stoneB);
+    pil.position.set(x, 0.6, z);
+    g.add(pil);
+  }
+  return g;
+}
+
+/** Runic altar — chunky plinth with carved sigils and glowing purple centre. */
+export function runicAltar(): THREE.Group {
+  const g = new THREE.Group();
+  const base = mkMesh(gBox(1.6, 0.3, 1.6), stoneDark);
+  base.position.y = 0.15;
+  g.add(base);
+  const mid = mkMesh(gBox(1.25, 0.55, 1.25), stoneA);
+  mid.position.y = 0.575;
+  g.add(mid);
+  const top = mkMesh(gBox(1.5, 0.2, 1.5), stoneDark);
+  top.position.y = 0.95;
+  g.add(top);
+  // Glowing rune plate on top.
+  const rune = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.1, 1.1),
+    new THREE.MeshStandardMaterial({
+      color: 0xa050ff, emissive: 0x6020a0, emissiveIntensity: 1.0,
+      roughness: 0.4,
+    }),
+  );
+  rune.rotation.x = -Math.PI / 2;
+  rune.position.y = 1.052;
+  g.add(rune);
+  // Four small candle posts at corners.
+  for (const [dx, dz] of [[-0.6, -0.6],[0.6,-0.6],[-0.6,0.6],[0.6,0.6]] as const) {
+    const post = mkMesh(gCyl(0.05, 0.06, 0.3, 6), wood);
+    post.position.set(dx, 1.2, dz);
+    g.add(post);
+    const flame = new THREE.Mesh(
+      gSph(0.06, 6, 5),
+      new THREE.MeshStandardMaterial({ color: 0xffc060, emissive: 0xff8020, emissiveIntensity: 1.2 }),
+    );
+    flame.position.set(dx, 1.38, dz);
+    g.add(flame);
+  }
+  return g;
+}
+
+/** Caged raven — iron cage, perch and a small black bird inside. */
+export function cagedRaven(): THREE.Group {
+  const g = new THREE.Group();
+  // Plinth base.
+  const plinth = mkMesh(gBox(0.7, 0.25, 0.7), stoneDark);
+  plinth.position.y = 0.125;
+  g.add(plinth);
+  // Cage floor.
+  const cageFloor = mkMesh(gBox(0.55, 0.05, 0.55), rustMetal);
+  cageFloor.position.y = 0.28;
+  g.add(cageFloor);
+  // Cage top cap.
+  const cap = mkMesh(gCone(0.35, 0.35, 10), rustMetal);
+  cap.position.y = 1.35;
+  g.add(cap);
+  // Vertical cage bars — 8 bars placed on a circle.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const bar = mkMesh(gCyl(0.015, 0.015, 0.95, 5), rustMetal);
+    bar.position.set(Math.cos(a) * 0.25, 0.78, Math.sin(a) * 0.25);
+    g.add(bar);
+  }
+  // Raven inside on a perch.
+  const perch = mkMesh(gCyl(0.015, 0.015, 0.48, 6), wood);
+  perch.rotation.z = Math.PI / 2;
+  perch.position.y = 0.55;
+  g.add(perch);
+  const body = mkMesh(gSph(0.11, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.6 }));
+  body.position.y = 0.7;
+  body.scale.set(1.3, 1, 1);
+  g.add(body);
+  const head = mkMesh(gSph(0.07, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.6 }));
+  head.position.set(0.1, 0.78, 0);
+  g.add(head);
+  // Bead eye.
+  const eye = mkMesh(gSph(0.015, 4, 3),
+    new THREE.MeshStandardMaterial({ color: 0xffd040, emissive: 0xaa6000, emissiveIntensity: 0.7 }));
+  eye.position.set(0.13, 0.8, 0.04);
+  g.add(eye);
+  return g;
+}
+
+/** Gothic bell tower cap — simple bell hung in a stone arch. */
+export function gothicBell(): THREE.Group {
+  const g = new THREE.Group();
+  // Two tall stone pillars.
+  const p1 = mkMesh(gBox(0.3, 2.2, 0.3), stoneB); p1.position.set(-0.7, 1.1, 0);
+  const p2 = mkMesh(gBox(0.3, 2.2, 0.3), stoneB); p2.position.set( 0.7, 1.1, 0);
+  g.add(p1, p2);
+  // Cross beam.
+  const beam = mkMesh(gBox(1.7, 0.24, 0.26), stoneDark);
+  beam.position.set(0, 2.2, 0);
+  g.add(beam);
+  // Decorative rooflet on top.
+  const roof = mkMesh(gCone(0.9, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.8 }));
+  roof.position.set(0, 2.7, 0);
+  roof.rotation.y = Math.PI / 4;
+  g.add(roof);
+  // Bell — bronze truncated cone + flare.
+  const bell = mkMesh(gCyl(0.18, 0.36, 0.6, 14), brass);
+  bell.position.set(0, 1.6, 0);
+  g.add(bell);
+  // Bell flange.
+  const flange = mkMesh(gTor(0.36, 0.035, 4, 16), brass);
+  flange.position.set(0, 1.3, 0);
+  flange.rotation.x = Math.PI / 2;
+  g.add(flange);
+  // Rope.
+  const rope = mkMesh(gCyl(0.015, 0.015, 0.9, 5),
+    new THREE.MeshStandardMaterial({ color: 0x7a5a28, roughness: 0.95 }));
+  rope.position.set(0, 1.2, 0);
+  g.add(rope);
+  // Clapper ball.
+  const clap = mkMesh(gSph(0.06, 6, 5),
+    new THREE.MeshStandardMaterial({ color: 0x2a2318, roughness: 0.8 }));
+  clap.position.set(0, 1.58, 0);
+  g.add(clap);
+  return g;
+}
+
+/** Family tree — gnarled tree whose "leaves" are little portraits (plane discs). */
+export function familyTree(): THREE.Group {
+  const g = new THREE.Group();
+  // Trunk.
+  const trunk = mkMesh(gCyl(0.22, 0.3, 2.2, 8), wood);
+  trunk.position.y = 1.1;
+  g.add(trunk);
+  // Crown.
+  const crown = mkMesh(gSph(1.2, 10, 8), new THREE.MeshStandardMaterial({
+    color: 0x3a5a2a, roughness: 0.8,
+  }));
+  crown.position.y = 2.5;
+  crown.scale.set(1.2, 0.9, 1.2);
+  g.add(crown);
+  // Portrait discs (locket-like plates) hanging on the tree.
+  const locketMat = new THREE.MeshStandardMaterial({
+    color: 0xc9a04a, emissive: 0x664a18, emissiveIntensity: 0.4, metalness: 0.7, roughness: 0.4,
+  });
+  const positions: [number, number, number][] = [
+    [ 0.7, 2.3,  0.2], [-0.6, 2.4, -0.3], [ 0.2, 2.7,  0.6],
+    [-0.5, 2.1,  0.5], [ 0.5, 2.6, -0.4], [ 0.0, 2.2, -0.6],
+  ];
+  for (const [x, y, z] of positions) {
+    const disc = mkMesh(gCyl(0.12, 0.12, 0.02, 12), locketMat);
+    disc.position.set(x, y, z);
+    disc.rotation.x = Math.PI / 2;
+    g.add(disc);
+    // Chain to trunk (tiny line).
+    const chain = mkMesh(gCyl(0.008, 0.008, 0.4, 4),
+      new THREE.MeshStandardMaterial({ color: 0x9a8040, metalness: 0.8, roughness: 0.3 }));
+    chain.position.set(x * 0.5, y + 0.1, z * 0.5);
+    g.add(chain);
+  }
+  return g;
+}
+
+/**
+ * 3D loot chest — iron-banded wooden chest, lid slightly ajar, glowing
+ * interior. Used by the chest-open animation in the modal overlay (we
+ * spawn one into the Three scene centre while the modal runs).
+ */
+export function lootChest(tint: number = 0xb07032): THREE.Group {
+  const g = new THREE.Group();
+  const woodMat2 = new THREE.MeshStandardMaterial({ color: 0x6b4422, roughness: 0.9 });
+  const bandMat = new THREE.MeshStandardMaterial({ color: tint, metalness: 0.6, roughness: 0.35 });
+  // Box body.
+  const body = mkMesh(gBox(1.1, 0.6, 0.7), woodMat2);
+  body.position.y = 0.3;
+  g.add(body);
+  // Iron bands around body.
+  for (const x of [-0.4, 0, 0.4] as const) {
+    const band = mkMesh(gBox(0.08, 0.62, 0.72), bandMat);
+    band.position.set(x, 0.3, 0);
+    g.add(band);
+  }
+  // Lid (tilted slightly open).
+  const lid = mkMesh(gBox(1.1, 0.2, 0.7), woodMat2);
+  lid.position.set(0, 0.7, -0.15);
+  lid.rotation.x = -0.4;
+  g.add(lid);
+  // Glow from inside — a small emissive disc.
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.5),
+    new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.7 }),
+  );
+  glow.position.set(0, 0.55, 0.1);
+  glow.rotation.x = -Math.PI / 2;
+  g.add(glow);
+  return g;
+}

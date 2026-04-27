@@ -1670,6 +1670,105 @@ function zombieSprite(): HTMLCanvasElement {
   return canvas;
 }
 
+// ---------- Loot-only exclusive sprite factories ----------
+
+/** Jet-black obsidian cross with purple-glowing hairline runes. */
+function tombObsidian(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(16, 20);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 19, 14, 1);
+  // Base plinth
+  rect(ctx, 2, 17, 12, 2, "#14121a");
+  rect(ctx, 3, 16, 10, 1, "#28222e");
+  // Shaft — pitch black with glossy purple highlight
+  rect(ctx, 7, 3, 2, 14, "#0a080f");
+  rect(ctx, 7, 3, 1, 14, "#1c1626");
+  // Cross bar
+  rect(ctx, 4, 6, 8, 2, "#0a080f");
+  rect(ctx, 4, 6, 8, 1, "#1c1626");
+  // Glowing runes
+  px(ctx, 8, 9, "#b469ff");
+  px(ctx, 8, 11, "#b469ff");
+  px(ctx, 8, 13, "#8a40d0");
+  px(ctx, 5, 7, "#8a40d0");
+  px(ctx, 10, 7, "#8a40d0");
+  // Sparkle highlight
+  px(ctx, 7, 4, "#e8c8ff");
+  return canvas;
+}
+
+/** Skull throne — stone seat + skull finials + red velvet cushion. */
+function statueThrone(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(16, 20);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(1, 19, 14, 1);
+  // Base steps
+  rect(ctx, 1, 17, 14, 2, PAL.stoneDark);
+  rect(ctx, 2, 16, 12, 1, PAL.stone);
+  // Back rest
+  rect(ctx, 3, 4, 10, 12, PAL.stone);
+  rect(ctx, 3, 4, 1, 12, PAL.stoneLight);
+  rect(ctx, 12, 4, 1, 12, PAL.stoneDark);
+  // Cushion
+  rect(ctx, 5, 13, 6, 3, "#9b1515");
+  rect(ctx, 5, 13, 6, 1, "#c73838");
+  // Skull finials
+  px(ctx, 3, 3, PAL.white); px(ctx, 4, 3, PAL.white);
+  px(ctx, 11, 3, PAL.white); px(ctx, 12, 3, PAL.white);
+  px(ctx, 3, 2, PAL.white); px(ctx, 4, 2, PAL.white);
+  px(ctx, 11, 2, PAL.white); px(ctx, 12, 2, PAL.white);
+  // Skull eyes
+  px(ctx, 3, 3, "#000"); px(ctx, 4, 3, "#000");
+  px(ctx, 11, 3, "#000"); px(ctx, 12, 3, "#000");
+  // Carved central skull on backrest
+  rect(ctx, 6, 6, 4, 4, PAL.white);
+  px(ctx, 7, 7, "#1a0c0c"); px(ctx, 8, 7, "#1a0c0c");
+  px(ctx, 7, 9, "#1a0c0c"); px(ctx, 8, 9, "#1a0c0c");
+  return canvas;
+}
+
+/** Lantern-phoenix: iron cage wraps an orange-white flame bird. */
+function lanternPhoenix(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(16, 20);
+  ctx.fillStyle = PAL.shadow; ctx.fillRect(5, 19, 6, 1);
+  // Post
+  rect(ctx, 7, 11, 2, 8, PAL.iron);
+  // Cage
+  rect(ctx, 4, 3, 8, 10, PAL.ironDark);
+  rect(ctx, 5, 4, 6, 8, "#141414");
+  // Flame ball
+  rect(ctx, 6, 6, 4, 5, "#ff7a20");
+  rect(ctx, 6, 6, 4, 2, "#ffc94d");
+  px(ctx, 7, 6, "#fff6d6"); px(ctx, 8, 6, "#fff6d6");
+  // Phoenix head + tail
+  px(ctx, 7, 4, "#ffc94d"); px(ctx, 8, 4, "#ffc94d");
+  px(ctx, 9, 7, "#ffeda0"); px(ctx, 6, 10, "#ff9040");
+  // Wings — spread
+  px(ctx, 3, 7, "#ff7a20"); px(ctx, 12, 7, "#ff7a20");
+  px(ctx, 3, 8, "#ffc94d"); px(ctx, 12, 8, "#ffc94d");
+  // Top hook
+  rect(ctx, 7, 2, 2, 1, PAL.iron);
+  return canvas;
+}
+
+/** Rib-cage fence — bones stacked vertically. */
+function fenceBone(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(16, 12);
+  // Horizontal rail
+  rect(ctx, 1, 7, 14, 1, "#d8d2b4");
+  // Vertical bones with knobby heads
+  for (let x = 2; x <= 14; x += 3) {
+    rect(ctx, x, 2, 1, 8, PAL.white);
+    // Knob on top
+    px(ctx, x - 1, 1, PAL.white);
+    px(ctx, x, 1, PAL.white);
+    px(ctx, x + 1, 1, PAL.white);
+    px(ctx, x, 0, PAL.white);
+    // Shadow side
+    px(ctx, x + 1, 3, "#a5a58c");
+    px(ctx, x + 1, 6, "#a5a58c");
+  }
+  return canvas;
+}
+
 // ---------- Registration ----------
 
 export function generateAllTextures(scene: Phaser.Scene) {
@@ -1721,6 +1820,13 @@ export function generateAllTextures(scene: Phaser.Scene) {
   register(scene, "lantern_brass", lanternBrass());
 
   register(scene, "statue_angel", statueAngel());
+
+  // ----- Loot-only exclusive sprites -----
+  register(scene, "tomb_obsidian", tombObsidian());
+  register(scene, "statue_throne", statueThrone());
+  register(scene, "lantern_phoenix", lanternPhoenix());
+  register(scene, "fence_bone", fenceBone());
+  register(scene, "flower_eternal", flower("#ff4040", { glow: true }));
 
   // Static necropolis structures
   register(scene, "build_mausoleum", buildingMausoleum());

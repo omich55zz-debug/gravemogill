@@ -13,6 +13,8 @@ import { progress } from "../systems/Progress";
 import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
 import { reputation } from "../systems/Reputation";
+import { loot } from "../systems/Loot";
+import { seasonForDay, SEASON_NAMES_RU, SEASON_ICONS } from "../systems/Seasons";
 import { buildings, tiersFor, type BuildingKind, type BuildingSlot } from "../systems/Buildings";
 import { Weather, pickWeather, type WeatherKind } from "../systems/Weather";
 import { shop } from "../systems/Shop";
@@ -253,8 +255,18 @@ export class GameScene extends Phaser.Scene {
       audio.play(verdict === "failed" ? "fail" : "success");
       // Big payouts trigger a cascading coin-rain; smaller ones just a single ding.
       audio.play(payout >= 500 ? "coinRain" : "coin");
+      // Chest drops: perfect orders get a 30% bronze drop.
+      if (verdict === "perfect" && Math.random() < 0.3) {
+        loot.grant("bronze");
+        this.showFloatText("⧉ Бронзовый сундук!", this.player.x, this.player.y - 44, "#e0a070");
+      }
       this.tryUnlock("first_complete");
       const n = progress.bump("ordersCompleted");
+      // Every 5th completed order: silver chest guaranteed.
+      if (n > 0 && n % 5 === 0) {
+        loot.grant("silver");
+        this.showFloatText("⧉ Серебряный сундук!", this.player.x, this.player.y - 58, "#c9d4dc");
+      }
       if (n >= 5) this.tryUnlock("five_graves");
       if (n >= 20) this.tryUnlock("twenty_graves");
       if (verdict === "perfect") {
@@ -275,6 +287,17 @@ export class GameScene extends Phaser.Scene {
       this.orders.checkDeadlines(day);
       // Ensure we keep at least N pending orders offered.
       while (this.orders.pending.length < this.minPendingOrders) this.orders.generate(day);
+      // Season rollover: re-tint the world + toast the player on change.
+      const newSeason = seasonForDay(day);
+      const current = this.three?.currentSeason();
+      if (current && current !== newSeason) {
+        this.three?.setSeason(newSeason);
+        this.showFloatText(
+          `${SEASON_ICONS[newSeason]}  ${SEASON_NAMES_RU[newSeason]}`,
+          this.player.x, this.player.y - 70, "#f4d27a",
+        );
+        audio.play("unlock");
+      }
     });
     // Hour bell — chime softly on key hours so the day feels alive.
     this.gameTime.on("hourChanged", (hour: number) => {
@@ -282,10 +305,12 @@ export class GameScene extends Phaser.Scene {
         audio.play("bell");
       }
     });
-    // Reputation rank-ups get a fanfare and a floating text callout.
+    // Reputation rank-ups get a fanfare, floating text and a gold chest drop.
     reputation.on("rankUp", (after: { name: string }) => {
       audio.play("rankUp");
       this.showFloatText(`Новый ранг: ${after.name}!`, this.player.x, this.player.y - 60, "#f4d27a");
+      loot.grant("gold");
+      this.showFloatText("⧉ Золотой сундук!", this.player.x, this.player.y - 80, "#ffc45a");
     });
 
     if (this.shouldLoadSave) {
@@ -304,6 +329,8 @@ export class GameScene extends Phaser.Scene {
     const initialWeather = pickWeather();
     this.weather.setKind(initialWeather);
     this.three?.setWeather(initialWeather);
+    // Apply initial season tint so the scene matches day 1's season.
+    this.three?.setSeason(seasonForDay(this.gameTime.day));
     this.lastWeatherDay = this.gameTime.day;
     // Keep 3D scene in sync with 2D Weather state when it changes.
     this.weather.on("changed", (k: WeatherKind) => {
@@ -1202,6 +1229,8 @@ export class GameScene extends Phaser.Scene {
       buildings.load(s.buildings);
       this.refreshBuildingMeshes();
     }
+    // Loot-box inventory
+    if (s.loot) loot.load(s.loot);
     // Restore player position if available.
     if (typeof s.playerX === "number" && typeof s.playerY === "number") {
       this.player.sprite.x = s.playerX;
