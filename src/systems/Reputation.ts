@@ -26,9 +26,11 @@ export class Reputation extends Phaser.Events.EventEmitter {
 
   /** Award reputation for a completed order. Higher difficulty = more points. */
   awardCompleted(orderTier: number = 1) {
+    const before = this.rank();
     const gain = Math.max(2, Math.round(3 * orderTier));
     this.points += gain;
     this.emit("changed", this.points, gain, "completed");
+    this.maybeEmitRankUp(before);
   }
 
   /** Penalize for a failed order. */
@@ -40,9 +42,19 @@ export class Reputation extends Phaser.Events.EventEmitter {
 
   /** Bonus for "special" themed graves (Dream / Horror / Rich / Quiet). */
   awardSpecialGrave(themeId: string) {
+    const before = this.rank();
     const gain = 5;
     this.points += gain;
     this.emit("changed", this.points, gain, `special:${themeId}`);
+    this.maybeEmitRankUp(before);
+  }
+
+  /** Fires a separate "rankUp" event when the current rank strictly increases. */
+  private maybeEmitRankUp(before: Rank) {
+    const after = this.rank();
+    if (after.threshold > before.threshold) {
+      this.emit("rankUp", after, before);
+    }
   }
 
   /** Current rank based on accumulated points. */

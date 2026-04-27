@@ -876,8 +876,10 @@ export class UIScene extends Phaser.Scene {
   // -------------- Modal helper --------------
 
   private openModal(draw: (c: Phaser.GameObjects.Container) => void) {
+    const wasOpen = !!this.modal;
     this.closeModal();
     this.game_.uiModalOpen = true;
+    if (!wasOpen) audio.play("modalOpen");
     const { width, height } = this.scale;
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0, 0).setInteractive();
     const c = this.add.container(width / 2, height / 2);
@@ -1105,6 +1107,7 @@ export class UIScene extends Phaser.Scene {
       dim?.destroy();
       this.modal.destroy();
       this.modal = undefined;
+      audio.play("modalClose");
     }
     this.game_.uiModalOpen = false;
   }

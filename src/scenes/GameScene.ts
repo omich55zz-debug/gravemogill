@@ -80,6 +80,10 @@ export class GameScene extends Phaser.Scene {
   private buildingMeshes = new Map<string, THREE.Object3D>();
   /** Animation time accumulator (seconds). Used by mesh idle/walk anims. */
   private _animT = 0;
+  /** Time since last footstep SFX while the player is walking. */
+  private _stepCooldown = 0;
+  /** Next time (animT seconds) at which Юпитер will softly meow. */
+  private _nextMeowAt = 8;
   private _catLastX = 0;
   private _catLastZ = 0;
   /** Wandering NPCs that walk between random grass tiles. */
@@ -263,6 +267,17 @@ export class GameScene extends Phaser.Scene {
       // Ensure we keep at least N pending orders offered.
       while (this.orders.pending.length < this.minPendingOrders) this.orders.generate(day);
     });
+    // Hour bell — chime softly on key hours so the day feels alive.
+    this.gameTime.on("hourChanged", (hour: number) => {
+      if (hour === 8 || hour === 12 || hour === 18 || hour === 22) {
+        audio.play("bell");
+      }
+    });
+    // Reputation rank-ups get a fanfare and a floating text callout.
+    reputation.on("rankUp", (after: { name: string }) => {
+      audio.play("rankUp");
+      this.showFloatText(`Новый ранг: ${after.name}!`, this.player.x, this.player.y - 60, "#f4d27a");
+    });
 
     if (this.shouldLoadSave) {
       this.applySave();
@@ -285,6 +300,7 @@ export class GameScene extends Phaser.Scene {
     this.weather.on("changed", (k: WeatherKind) => {
       this.three?.setWeather(k);
       this.events.emit("weather", k);
+      audio.play("weather");
     });
 
     // Resize handling + camera zoom/pan controls
@@ -348,6 +364,25 @@ export class GameScene extends Phaser.Scene {
       const p = this.three.phaserToThree(this.player.x, this.player.y);
       const stickMag = Math.hypot(this.player.stick.x, this.player.stick.y);
       const walking = stickMag > 0.05;
+      // Footstep SFX — cadence scales with stick magnitude so running
+      // (stick pegged) gives a faster pitter-patter than walking.
+      if (walking) {
+        this._stepCooldown -= dt;
+        if (this._stepCooldown <= 0) {
+          // Pick the right material based on the tile the player is standing on.
+          const cell = this.grid.worldToTile(this.player.x, this.player.y);
+          const terrain = this.grid.cells[cell.row]?.[cell.col]?.terrain;
+          audio.play(terrain === "path" ? "footstepStone" : "footstep");
+          this._stepCooldown = 0.48 - stickMag * 0.18;
+        }
+      } else {
+        this._stepCooldown = 0;
+      }
+      // Юпитер occasionally meows — every 18-32 sec of playtime.
+      if (at >= this._nextMeowAt) {
+        audio.play("meow");
+        this._nextMeowAt = at + 18 + Math.random() * 14;
+      }
       const walkBob = walking
         ? Math.abs(Math.sin(at * 9)) * 0.05
         : Math.sin(at * 1.6) * 0.018;
@@ -918,7 +953,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.economy.earn(-spec.cost);
-    audio.play("coin");
+    audio.play("buildingUpgrade");
     const result = buildings.upgrade(slot);
     if (!result.success) return;
     // Swap the 3D mesh.
@@ -982,6 +1017,7 @@ export class GameScene extends Phaser.Scene {
       }
       const msg = `Расчищена земля! +${added.length} могильных мест`;
       this.showFloatText(msg, this.player.x, this.player.y - 50, "#f4d27a");
+      audio.play("mapExpand");
     }
     this.saveNow();
   }

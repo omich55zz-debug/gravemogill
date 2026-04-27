@@ -20,11 +20,21 @@ type SoundName =
   | "path"
   | "click"
   | "footstep"
+  | "footstepStone"
   | "success"
   | "fail"
   | "zombieRise"
   | "zombieGone"
-  | "zombieHit";
+  | "zombieHit"
+  | "bell"
+  | "mapExpand"
+  | "meow"
+  | "caw"
+  | "buildingUpgrade"
+  | "modalOpen"
+  | "modalClose"
+  | "weather"
+  | "rankUp";
 
 const PREFS_KEY = "gravemogill.audio.v1";
 interface AudioPrefs { master: number; sfx: number; music: number; muted: boolean; }
@@ -169,7 +179,110 @@ class AudioEngine {
         this.noiseHit(ctx, 0.12, 600, 100, 0.4);
         this.toneChain(ctx, [180, 130], [0.05, 0.08], "square", 0.18);
         break;
+      case "footstepStone":
+        // Sharper, higher than dirt footstep — boot on cobblestone.
+        this.noiseHit(ctx, 0.05, 600, 200, 0.13);
+        break;
+      case "bell":
+        // Deep cathedral bell with long decay — used on hour changes.
+        this.bellTone(ctx, 196, 1.6, 0.32);
+        this.bellTone(ctx, 392, 1.4, 0.18);
+        break;
+      case "mapExpand":
+        // Magical "shing" — rising arpeggio with shimmer.
+        this.toneChain(ctx, [523, 784, 1046, 1568, 2093], [0.06, 0.06, 0.08, 0.1, 0.2], "triangle", 0.22);
+        this.noiseHit(ctx, 0.45, 4000, 800, 0.08);
+        break;
+      case "meow":
+        // Cat purr-meow with slight pitch waver — short and friendly.
+        this.meow(ctx);
+        break;
+      case "caw":
+        // Crow caw — gravelly noise burst with falling pitch.
+        this.noiseHit(ctx, 0.22, 1200, 300, 0.28);
+        this.noiseHit(ctx, 0.18, 900, 240, 0.22);
+        break;
+      case "buildingUpgrade":
+        // Heavy resonant gong — building tier up.
+        this.bellTone(ctx, 130, 2.2, 0.42);
+        this.toneChain(ctx, [261, 392, 523], [0.12, 0.12, 0.25], "triangle", 0.28);
+        break;
+      case "modalOpen":
+        // Soft swoosh up.
+        this.toneChain(ctx, [440, 660], [0.05, 0.08], "sine", 0.1);
+        break;
+      case "modalClose":
+        // Soft swoosh down.
+        this.toneChain(ctx, [660, 440], [0.05, 0.08], "sine", 0.1);
+        break;
+      case "weather":
+        // Wind whoosh — long noise burst.
+        this.noiseHit(ctx, 0.7, 350, 90, 0.16);
+        break;
+      case "rankUp":
+        // Triumphant fanfare — reputation rank up.
+        this.toneChain(ctx, [392, 523, 659, 784, 1046, 1319], [0.08, 0.08, 0.08, 0.08, 0.12, 0.25], "triangle", 0.3);
+        this.bellTone(ctx, 261, 1.4, 0.2);
+        break;
     }
+  }
+
+  /** Long-decay bell tone with a metallic partial. */
+  private bellTone(ctx: AudioContext, freq: number, dur: number, gain: number) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    const fundamental = ctx.createOscillator();
+    fundamental.type = "sine";
+    fundamental.frequency.value = freq;
+    const partial = ctx.createOscillator();
+    partial.type = "sine";
+    partial.frequency.value = freq * 2.756; // inharmonic bell partial
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(gain, now + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    const partialEnv = ctx.createGain();
+    partialEnv.gain.setValueAtTime(0, now);
+    partialEnv.gain.linearRampToValueAtTime(gain * 0.4, now + 0.01);
+    partialEnv.gain.exponentialRampToValueAtTime(0.001, now + dur * 0.55);
+    fundamental.connect(env);
+    partial.connect(partialEnv);
+    env.connect(this.sfxGain);
+    partialEnv.connect(this.sfxGain);
+    fundamental.start(now);
+    partial.start(now);
+    fundamental.stop(now + dur + 0.05);
+    partial.stop(now + dur * 0.6 + 0.05);
+  }
+
+  /** Quick sliding "miau" with vibrato. */
+  private meow(ctx: AudioContext) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(380, now);
+    osc.frequency.linearRampToValueAtTime(620, now + 0.12);
+    osc.frequency.linearRampToValueAtTime(440, now + 0.32);
+    // Vibrato.
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 7;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 18;
+    lfo.connect(lfoGain).connect(osc.frequency);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1400;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(0.18, now + 0.04);
+    env.gain.linearRampToValueAtTime(0.12, now + 0.2);
+    env.gain.linearRampToValueAtTime(0, now + 0.36);
+    osc.connect(lp).connect(env).connect(this.sfxGain);
+    osc.start(now);
+    lfo.start(now);
+    osc.stop(now + 0.4);
+    lfo.stop(now + 0.4);
   }
 
   private toneChain(

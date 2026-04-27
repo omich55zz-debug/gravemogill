@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CONFIG } from "../data/config";
+import { audio } from "../systems/Audio";
 import type { Cell } from "../utils/grid";
 import {
   tombStone, tombObelisk, tombCross, tombMarble, tombAngel,
@@ -243,6 +244,11 @@ export class ThreeWorld {
         t.position.set(x + (rnd() - 0.5) * 0.4, 0, z + (rnd() - 0.5) * 0.4);
         t.scale.setScalar(0.85 + rnd() * 0.35);
         t.rotation.y = rnd() * Math.PI * 2;
+        // Trees are decorative — skip shadow casting (expensive) but
+        // keep receive so they catch tombstone / building shadows.
+        t.traverse(o => {
+          if ((o as THREE.Mesh).isMesh) { (o as THREE.Mesh).castShadow = false; }
+        });
         this.scene.add(t);
         this.swayingTrees.push({ obj: t, phase: rnd() * Math.PI * 2 });
         break;
@@ -258,6 +264,13 @@ export class ThreeWorld {
         const { x, z } = worldC(c, r);
         gc.position.set(x + (rnd() - 0.5) * 0.6, 0, z + (rnd() - 0.5) * 0.6);
         gc.scale.setScalar(0.7 + rnd() * 0.5);
+        // Grass tufts are tiny — no shadow casting/receiving needed.
+        gc.traverse(o => {
+          if ((o as THREE.Mesh).isMesh) {
+            (o as THREE.Mesh).castShadow = false;
+            (o as THREE.Mesh).receiveShadow = false;
+          }
+        });
         this.scene.add(gc);
         break;
       }
@@ -855,17 +868,24 @@ export class ThreeWorld {
   }
 
   private _lastRenderTs = 0;
+  /** Monotonic frame counter — used to stagger expensive per-frame work. */
+  private _frameIdx = 0;
   render() {
     this.updateCamera();
     const t = performance.now();
     const dt = this._lastRenderTs > 0 ? (t - this._lastRenderTs) / 1000 : 0.016;
     this._lastRenderTs = t;
+    this._frameIdx = (this._frameIdx + 1) | 0;
+    // Split per-frame decorative work across alternating frames on mobile,
+    // so we never do *all* of it in the same tick. Visually imperceptible
+    // at 30fps since sway / firefly drift are slow.
+    const even = (this._frameIdx & 1) === 0;
     this.updatePlayerLantern(t);
     this.updateTorches(t);
-    this.updateMist(t);
-    this.updateRain(dt);
-    this.updateSway(t);
-    this.updateFireflies(t);
+    if (!this.isMobile || even) this.updateMist(t);
+    if (!this.isMobile || even) this.updateRain(dt);
+    if (!this.isMobile || even) this.updateSway(t);
+    if (!this.isMobile || !even) this.updateFireflies(t);
     this.updateCrow(t);
     this.renderer.render(this.scene, this.camera);
   }
@@ -922,6 +942,8 @@ export class ThreeWorld {
         };
         c.visible = true;
         this.crowNextSpawn = now + 30_000 + Math.random() * 30_000;
+        // Caw — gravelly and atmospheric, a little delayed feels natural.
+        setTimeout(() => audio.play("caw"), 180);
       }
       return;
     }
