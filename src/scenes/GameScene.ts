@@ -84,6 +84,14 @@ export class GameScene extends Phaser.Scene {
   private _stepCooldown = 0;
   /** Next time (animT seconds) at which Юпитер will softly meow. */
   private _nextMeowAt = 8;
+  /** Next time for a night-only owl hoot. */
+  private _nextOwlAt = 20;
+  /** Next time for an occasional distant wolf howl (night + overcast). */
+  private _nextWolfAt = 45;
+  /** Next time for a faint choir chime (day time, rare). */
+  private _nextChoirAt = 120;
+  /** Next time for a heartbeat ambient when zombies are near. */
+  private _nextHeartAt = 0;
   private _catLastX = 0;
   private _catLastZ = 0;
   /** Wandering NPCs that walk between random grass tiles. */
@@ -243,7 +251,8 @@ export class GameScene extends Phaser.Scene {
         });
       }
       audio.play(verdict === "failed" ? "fail" : "success");
-      audio.play("coin");
+      // Big payouts trigger a cascading coin-rain; smaller ones just a single ding.
+      audio.play(payout >= 500 ? "coinRain" : "coin");
       this.tryUnlock("first_complete");
       const n = progress.bump("ordersCompleted");
       if (n >= 5) this.tryUnlock("five_graves");
@@ -382,6 +391,37 @@ export class GameScene extends Phaser.Scene {
       if (at >= this._nextMeowAt) {
         audio.play("meow");
         this._nextMeowAt = at + 18 + Math.random() * 14;
+      }
+      // Ambient night life — gated on in-game hour so the world feels
+      // alive without spamming the player.
+      const hour = this.gameTime.hour;
+      const night = hour >= 21 || hour < 6;
+      if (night && at >= this._nextOwlAt) {
+        audio.play("owl");
+        this._nextOwlAt = at + 20 + Math.random() * 25;
+      }
+      const overcastOrNight = night || this.weather?.kind === "overcast";
+      if (overcastOrNight && at >= this._nextWolfAt) {
+        audio.play("wolf");
+        this._nextWolfAt = at + 60 + Math.random() * 50;
+      }
+      if (!night && at >= this._nextChoirAt) {
+        audio.play("choir");
+        this._nextChoirAt = at + 140 + Math.random() * 120;
+      }
+      // Danger heartbeat when any zombie is within ~160px of the player.
+      if (at >= this._nextHeartAt) {
+        const zombieNear = this.zombies.some(z => {
+          const dx = z.sprite.x - this.player.x;
+          const dy = z.sprite.y - this.player.y;
+          return dx * dx + dy * dy < 160 * 160;
+        });
+        if (zombieNear) {
+          audio.play("heartbeat");
+          this._nextHeartAt = at + 1.3;
+        } else {
+          this._nextHeartAt = at + 0.7;
+        }
       }
       const walkBob = walking
         ? Math.abs(Math.sin(at * 9)) * 0.05
@@ -764,6 +804,8 @@ export class GameScene extends Phaser.Scene {
     v.tombstoneMesh = this.three.addProp(item.sprite, cell.col, cell.row) ?? undefined;
     cell.grave!.tombstoneId = item.id;
     audio.play("place");
+    // Heavy tombstones get a deeper stone-settle thud on top of the ding.
+    if (item.cost >= 100) audio.play("tombThud");
     this.maybeHint("add_decor");
     this.maybeHint("inscribe");
     this.showFloatText(`${item.name} −${item.cost}₽`, this.player.x, this.player.y - 20, "#b8e994");
@@ -953,6 +995,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.economy.earn(-spec.cost);
+    audio.play("doorCreak");
     audio.play("buildingUpgrade");
     const result = buildings.upgrade(slot);
     if (!result.success) return;

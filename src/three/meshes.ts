@@ -2210,3 +2210,254 @@ export function pond(radius = 2.5): THREE.Group {
   g.add(water);
   return g;
 }
+
+// ---------------- New gothic decor (added for "more models") ----------------
+
+/**
+ * Stone well with a wooden roof, bucket on a rope, and mossy rim.
+ * Fits the "old forgotten cemetery" vibe — rope can hang over the edge.
+ */
+export function well(): THREE.Group {
+  const g = new THREE.Group();
+  // Stone ring base (two stacked rings for height).
+  const ringLow = mkMesh(gCyl(0.55, 0.6, 0.32, 16), stoneA);
+  ringLow.position.y = 0.16;
+  g.add(ringLow);
+  const ringHi = mkMesh(gCyl(0.52, 0.55, 0.28, 16), stoneB);
+  ringHi.position.y = 0.46;
+  g.add(ringHi);
+  // Dark water disc inside.
+  const water = mkMesh(gCyl(0.45, 0.45, 0.02, 16),
+    new THREE.MeshStandardMaterial({ color: 0x0a1820, roughness: 0.4, metalness: 0.1 }),
+    false, false);
+  water.position.y = 0.52;
+  g.add(water);
+  // Four wooden posts + roof.
+  const postMat = wood;
+  for (const dx of [-0.45, 0.45]) {
+    const p = mkMesh(gBox(0.08, 1.0, 0.08), postMat);
+    p.position.set(dx, 1.1, 0);
+    g.add(p);
+  }
+  // Crossbar for the rope.
+  const bar = mkMesh(gBox(1.0, 0.08, 0.08), postMat);
+  bar.position.set(0, 1.58, 0);
+  g.add(bar);
+  // Peaked shingle roof (two planes as a tent).
+  const roofMatL = new THREE.MeshStandardMaterial({ color: 0x3a271a, roughness: 0.95 });
+  const r1 = mkMesh(gBox(1.15, 0.04, 0.7), roofMatL);
+  r1.position.set(-0.22, 1.75, 0);
+  r1.rotation.z = -0.6;
+  g.add(r1);
+  const r2 = mkMesh(gBox(1.15, 0.04, 0.7), roofMatL);
+  r2.position.set(0.22, 1.75, 0);
+  r2.rotation.z = 0.6;
+  g.add(r2);
+  // Rope to bucket.
+  const rope = mkMesh(gCyl(0.02, 0.02, 0.85, 6),
+    new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 1 }), false, false);
+  rope.position.set(0, 1.16, 0.02);
+  g.add(rope);
+  // Bucket.
+  const bucket = mkMesh(gCyl(0.14, 0.16, 0.22, 10),
+    new THREE.MeshStandardMaterial({ color: 0x5a4228, roughness: 1 }));
+  bucket.position.set(0, 0.82, 0.02);
+  g.add(bucket);
+  // Iron band on bucket.
+  const band = mkMesh(gCyl(0.152, 0.172, 0.04, 10), rustMetal);
+  band.position.set(0, 0.82, 0.02);
+  g.add(band);
+  // Moss patch on the rim.
+  const moss = mkMesh(gBox(0.25, 0.015, 0.2), mossGreen);
+  moss.position.set(-0.3, 0.58, -0.25);
+  g.add(moss);
+  return g;
+}
+
+/**
+ * Weeping-willow tree — taller than a normal tree, with a curtain of
+ * hanging "leaf ribbons" (4 planes drooping from the crown).
+ */
+export function willow(): THREE.Group {
+  const g = new THREE.Group();
+  // Twisted trunk.
+  const trunk = mkMesh(gCyl(0.18, 0.24, 3.2, 7), wood);
+  trunk.position.y = 1.6;
+  trunk.rotation.z = 0.05;
+  g.add(trunk);
+  // Crown (cluster of flattened ellipsoids).
+  const leafMat = new THREE.MeshStandardMaterial({
+    color: 0x6a8a4a, roughness: 0.9,
+    transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+  });
+  const crown = mkMesh(gSph(1.25, 10, 8), leafMat);
+  crown.position.y = 3.4;
+  crown.scale.set(1, 0.75, 1);
+  g.add(crown);
+  // Drooping leaf ribbons — 6 planes in a circle.
+  for (let i = 0; i < 6; i++) {
+    const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 2.3), leafMat);
+    const a = (i / 6) * Math.PI * 2;
+    ribbon.position.set(Math.cos(a) * 1.0, 2.1, Math.sin(a) * 1.0);
+    ribbon.rotation.y = a;
+    ribbon.rotation.z = -0.12; // droop outward
+    g.add(ribbon);
+  }
+  return g;
+}
+
+/** Cluster of red-spotted toadstools. Decorative only. */
+export function toadstools(): THREE.Group {
+  const g = new THREE.Group();
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xb0321a, roughness: 0.6 });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0xf5ecd0, roughness: 0.85 });
+  const spotMat = new THREE.MeshStandardMaterial({ color: 0xfaf2e0, roughness: 0.7 });
+  const make = (x: number, z: number, size: number) => {
+    const stem = mkMesh(gCyl(0.03 * size, 0.045 * size, 0.16 * size, 6), stemMat);
+    stem.position.set(x, 0.08 * size, z);
+    g.add(stem);
+    const cap = mkMesh(gSph(0.1 * size, 8, 6), capMat);
+    cap.position.set(x, 0.18 * size, z);
+    cap.scale.set(1, 0.6, 1);
+    g.add(cap);
+    // Three white spots on top.
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + Math.random();
+      const r = 0.05 * size;
+      const spot = mkMesh(gSph(0.018 * size, 5, 4), spotMat);
+      spot.position.set(x + Math.cos(a) * r, 0.22 * size, z + Math.sin(a) * r);
+      g.add(spot);
+    }
+  };
+  make(0, 0, 1.0);
+  make(0.18, 0.05, 0.75);
+  make(-0.14, 0.12, 0.85);
+  return g;
+}
+
+/**
+ * Broken stone pillar — half a column standing, with a capital chunk
+ * and small debris scattered at the base.
+ */
+export function brokenPillar(): THREE.Group {
+  const g = new THREE.Group();
+  // Standing column shaft, capped with a jagged break.
+  const shaft = mkMesh(gCyl(0.24, 0.28, 1.4, 10), stoneA);
+  shaft.position.y = 0.7;
+  g.add(shaft);
+  // Uneven top (a slightly skewed disc).
+  const top = mkMesh(gCyl(0.26, 0.22, 0.12, 10), stoneB);
+  top.position.y = 1.46;
+  top.rotation.z = 0.15;
+  g.add(top);
+  // Three stone debris chunks on the ground.
+  const debrisMat = stoneB;
+  const d1 = mkMesh(gBox(0.35, 0.16, 0.3), debrisMat);
+  d1.position.set(0.45, 0.08, 0.1);
+  d1.rotation.y = 0.4;
+  g.add(d1);
+  const d2 = mkMesh(gBox(0.25, 0.12, 0.22), debrisMat);
+  d2.position.set(-0.35, 0.06, 0.3);
+  d2.rotation.y = -0.6;
+  g.add(d2);
+  const d3 = mkMesh(gBox(0.18, 0.1, 0.18), debrisMat);
+  d3.position.set(0.1, 0.05, -0.4);
+  d3.rotation.y = 0.9;
+  g.add(d3);
+  // Moss patch creeping up the base.
+  const moss = mkMesh(gBox(0.45, 0.3, 0.04), mossGreen);
+  moss.position.set(0, 0.3, 0.28);
+  g.add(moss);
+  return g;
+}
+
+/**
+ * Squat gothic gargoyle — winged stone creature on a short plinth.
+ * Purely decorative. Faces +Z by default.
+ */
+export function gargoyle(): THREE.Group {
+  const g = new THREE.Group();
+  // Plinth.
+  const plinth = mkMesh(gBox(0.7, 0.25, 0.7), stoneA);
+  plinth.position.y = 0.12;
+  g.add(plinth);
+  // Body (hunched rounded block).
+  const body = mkMesh(gBox(0.5, 0.45, 0.55), stoneDark);
+  body.position.y = 0.48;
+  g.add(body);
+  // Head.
+  const head = mkMesh(gBox(0.34, 0.3, 0.34), stoneDark);
+  head.position.set(0, 0.82, 0.12);
+  g.add(head);
+  // Two horns.
+  const hornMat = stoneDark;
+  for (const dx of [-0.12, 0.12]) {
+    const h = mkMesh(gCone(0.06, 0.18, 6), hornMat);
+    h.position.set(dx, 0.99, 0.18);
+    h.rotation.x = -0.4;
+    g.add(h);
+  }
+  // Folded wings (two angled planes).
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2426, roughness: 0.95, side: THREE.DoubleSide,
+  });
+  for (const dx of [-0.3, 0.3]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.5), wingMat);
+    w.position.set(dx, 0.5, -0.08);
+    w.rotation.y = dx < 0 ? 0.5 : -0.5;
+    w.rotation.z = 0.2 * (dx < 0 ? 1 : -1);
+    g.add(w);
+  }
+  // Red-glinted eyes (2 tiny cubes) — emissive.
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0x4a0806, emissive: 0x801010, emissiveIntensity: 0.8,
+  });
+  for (const dx of [-0.06, 0.06]) {
+    const e = mkMesh(gBox(0.04, 0.04, 0.04), eyeMat);
+    e.position.set(dx, 0.86, 0.3);
+    g.add(e);
+  }
+  return g;
+}
+
+/**
+ * Paper sky lantern hanging on a tall iron pole with a hook.
+ * Glowing orange — placed along main paths for evening atmosphere.
+ */
+export function skyLantern(): THREE.Group {
+  const g = new THREE.Group();
+  // Ground stake.
+  const stake = mkMesh(gBox(0.1, 0.2, 0.1), rustMetal);
+  stake.position.y = 0.1;
+  g.add(stake);
+  // Tall iron pole with a curved top (approximated by 2 segments).
+  const poleMat = rustMetal;
+  const pole = mkMesh(gCyl(0.04, 0.04, 1.8, 6), poleMat);
+  pole.position.y = 1.1;
+  g.add(pole);
+  const hook = mkMesh(gCyl(0.04, 0.04, 0.3, 6), poleMat);
+  hook.position.set(0.15, 2.0, 0);
+  hook.rotation.z = Math.PI / 2;
+  g.add(hook);
+  // Short rope to the lantern.
+  const rope = mkMesh(gCyl(0.015, 0.015, 0.18, 4),
+    new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 1 }), false, false);
+  rope.position.set(0.3, 1.85, 0);
+  g.add(rope);
+  // Paper lantern body — warm glowing sphere.
+  const paperMat = new THREE.MeshStandardMaterial({
+    color: 0xf9c27a, emissive: 0xffa83c, emissiveIntensity: 0.7,
+    transparent: true, opacity: 0.95, roughness: 0.7,
+  });
+  const lantern = mkMesh(gSph(0.22, 10, 8), paperMat, false, false);
+  lantern.position.set(0.3, 1.6, 0);
+  lantern.scale.set(1, 1.15, 1);
+  g.add(lantern);
+  // Thin bamboo ring around the lantern middle.
+  const ring = mkMesh(gTor(0.22, 0.012, 5, 16),
+    new THREE.MeshStandardMaterial({ color: 0x6a4a28, roughness: 0.9 }));
+  ring.position.set(0.3, 1.6, 0);
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  return g;
+}

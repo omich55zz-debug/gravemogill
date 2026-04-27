@@ -34,7 +34,15 @@ type SoundName =
   | "modalOpen"
   | "modalClose"
   | "weather"
-  | "rankUp";
+  | "rankUp"
+  | "owl"
+  | "wolf"
+  | "choir"
+  | "splash"
+  | "doorCreak"
+  | "tombThud"
+  | "coinRain"
+  | "heartbeat";
 
 const PREFS_KEY = "gravemogill.audio.v1";
 interface AudioPrefs { master: number; sfx: number; music: number; muted: boolean; }
@@ -224,7 +232,179 @@ class AudioEngine {
         this.toneChain(ctx, [392, 523, 659, 784, 1046, 1319], [0.08, 0.08, 0.08, 0.08, 0.12, 0.25], "triangle", 0.3);
         this.bellTone(ctx, 261, 1.4, 0.2);
         break;
+      case "owl":
+        // Two-note "whoo-whooo" with breath.
+        this.owlHoot(ctx);
+        break;
+      case "wolf":
+        // Long mournful howl with vibrato.
+        this.wolfHowl(ctx);
+        break;
+      case "choir":
+        // Distant choral chord — stacked slow sine tones.
+        this.choir(ctx);
+        break;
+      case "splash":
+        // Short watery splash — descending noise + bubbly mod.
+        this.noiseHit(ctx, 0.22, 1800, 400, 0.22);
+        this.toneChain(ctx, [440, 300], [0.04, 0.08], "sine", 0.12);
+        break;
+      case "doorCreak":
+        // Long creak — rising-then-falling sawtooth sweep + friction noise.
+        this.doorCreak(ctx);
+        break;
+      case "tombThud":
+        // Heavy stone-on-stone settle.
+        this.noiseHit(ctx, 0.14, 150, 60, 0.5);
+        this.toneChain(ctx, [80, 55], [0.06, 0.1], "sawtooth", 0.28);
+        break;
+      case "coinRain":
+        // Cascade of little dings — big payout.
+        for (let i = 0; i < 8; i++) {
+          setTimeout(() => {
+            this.toneChain(ctx, [1200 + Math.random() * 400, 1600 + Math.random() * 400],
+              [0.03, 0.06], "triangle", 0.14);
+          }, i * 70);
+        }
+        break;
+      case "heartbeat":
+        // Two thumps low-passed — danger ambient.
+        this.heartBeat(ctx);
+        break;
     }
+  }
+
+  /** Owl two-note hoot "whoo-whoooo". */
+  private owlHoot(ctx: AudioContext) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    // First short hoot.
+    this.owlTone(ctx, now, 0.22, 0.18);
+    // Second longer hoot.
+    this.owlTone(ctx, now + 0.3, 0.42, 0.2);
+  }
+
+  private owlTone(ctx: AudioContext, t0: number, dur: number, gain: number) {
+    if (!this.sfxGain) return;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(260, t0);
+    osc.frequency.linearRampToValueAtTime(230, t0 + dur);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 600;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(gain, t0 + 0.08);
+    env.gain.linearRampToValueAtTime(gain * 0.9, t0 + dur * 0.7);
+    env.gain.linearRampToValueAtTime(0, t0 + dur);
+    osc.connect(lp).connect(env).connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+
+  /** Distant wolf howl — long vibrato. */
+  private wolfHowl(ctx: AudioContext) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    const dur = 1.8;
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.linearRampToValueAtTime(360, now + 0.45);
+    osc.frequency.linearRampToValueAtTime(420, now + 1.0);
+    osc.frequency.linearRampToValueAtTime(280, now + dur);
+    // Vibrato.
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 4.5;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 12;
+    lfo.connect(lfoGain).connect(osc.frequency);
+    // Slightly muffled — distant.
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 900;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(0.18, now + 0.3);
+    env.gain.linearRampToValueAtTime(0.22, now + 1.1);
+    env.gain.linearRampToValueAtTime(0, now + dur);
+    osc.connect(lp).connect(env).connect(this.sfxGain);
+    osc.start(now);
+    lfo.start(now);
+    osc.stop(now + dur + 0.1);
+    lfo.stop(now + dur + 0.1);
+  }
+
+  /** Slow choral chord — D minor pad. */
+  private choir(ctx: AudioContext) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    const freqs = [146.8, 220, 261.6, 349.2]; // D3 A3 C4 F4 — minor with add-4
+    for (const f of freqs) {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, now);
+      env.gain.linearRampToValueAtTime(0.09, now + 0.9);
+      env.gain.linearRampToValueAtTime(0.05, now + 2.4);
+      env.gain.linearRampToValueAtTime(0, now + 3.5);
+      osc.connect(env).connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 3.6);
+    }
+  }
+
+  /** Door creak — friction noise + pitched sawtooth sweep. */
+  private doorCreak(ctx: AudioContext) {
+    if (!this.sfxGain) return;
+    const now = ctx.currentTime;
+    const dur = 0.55;
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(110, now);
+    osc.frequency.linearRampToValueAtTime(260, now + dur * 0.6);
+    osc.frequency.linearRampToValueAtTime(170, now + dur);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 420;
+    bp.Q.value = 3;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(0.18, now + 0.08);
+    env.gain.linearRampToValueAtTime(0.12, now + dur * 0.7);
+    env.gain.linearRampToValueAtTime(0, now + dur);
+    osc.connect(bp).connect(env).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + dur + 0.05);
+    // Brief friction noise at start.
+    this.noiseHit(ctx, 0.12, 900, 300, 0.08);
+  }
+
+  /** Two low thumps — heartbeat. */
+  private heartBeat(ctx: AudioContext) {
+    const sfx = this.sfxGain;
+    if (!sfx) return;
+    const thump = (t0: number) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(120, t0);
+      osc.frequency.linearRampToValueAtTime(60, t0 + 0.12);
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 280;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t0);
+      env.gain.linearRampToValueAtTime(0.42, t0 + 0.02);
+      env.gain.linearRampToValueAtTime(0, t0 + 0.14);
+      osc.connect(lp).connect(env).connect(sfx);
+      osc.start(t0);
+      osc.stop(t0 + 0.16);
+    };
+    const now = ctx.currentTime;
+    thump(now);
+    thump(now + 0.28);
   }
 
   /** Long-decay bell tone with a metallic partial. */

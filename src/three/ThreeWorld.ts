@@ -15,6 +15,7 @@ import {
   entityPlayer, entityCat, entityZombie, entityVillager, graveHole,
   type VillagerVariant,
   tree, grassClump, pond, raven,
+  well, willow, toadstools, brokenPillar, gargoyle, skyLantern,
 } from "./meshes";
 import {
   grassGroundTexture, stonePathTexture, earthTexture,
@@ -313,6 +314,13 @@ export class ThreeWorld {
       { make: decorStoneBench,    count: 4, rotate: true  },
       { make: decorWeepingAngel,  count: 2, rotate: true  },
       { make: () => decorFountain(1.1), count: 1, rotate: false },
+      // New gothic props — sprinkled sparingly for flavour.
+      { make: well,               count: 2, rotate: true  },
+      { make: willow,             count: 3, rotate: true  },
+      { make: toadstools,         count: 6, rotate: true  },
+      { make: brokenPillar,       count: 3, rotate: true  },
+      { make: gargoyle,           count: 2, rotate: true  },
+      { make: skyLantern,         count: 5, rotate: true  },
     ];
     for (const spec of decorSpecs) {
       let placed = 0, attempts = 0;
