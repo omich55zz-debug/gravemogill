@@ -106,9 +106,8 @@ export class ThreeWorld {
     });
     this.renderer.setPixelRatio(pixelCap);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    // Cheaper shadow filter on mobile.
-    this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    // Shadows globally disabled — user preference, big perf win.
+    this.renderer.shadowMap.enabled = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
@@ -130,19 +129,8 @@ export class ThreeWorld {
 
     this.sun = new THREE.DirectionalLight(0xb8caff, 0.85);
     this.sun.position.set(-12, 28, -10);
-    this.sun.castShadow = true;
-    // 1024 on mobile (was 2048) — quartered shadow-map cost, barely visible.
-    const shadowRes = isMobile ? 1024 : 2048;
-    this.sun.shadow.mapSize.set(shadowRes, shadowRes);
-    const s = 30;
-    this.sun.shadow.camera.left = -s;
-    this.sun.shadow.camera.right = s;
-    this.sun.shadow.camera.top = s;
-    this.sun.shadow.camera.bottom = -s;
-    this.sun.shadow.camera.near = 0.5;
-    this.sun.shadow.camera.far = 90;
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.03;
+    // Shadows disabled globally — keep castShadow=false to save GPU work.
+    this.sun.castShadow = false;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
@@ -745,11 +733,8 @@ export class ThreeWorld {
   ensurePlayerLantern(): THREE.PointLight {
     if (this.playerLantern) return this.playerLantern;
     const l = new THREE.PointLight(0x6fc8ff, 3.0, 9.0, 1.6);
-    l.castShadow = true;
-    l.shadow.mapSize.set(512, 512);
-    l.shadow.camera.near = 0.05;
-    l.shadow.camera.far = 10;
-    l.shadow.bias = -0.002;
+    // Shadows globally disabled — no shadow-camera setup needed.
+    l.castShadow = false;
     this.scene.add(l);
     this.playerLantern = l;
     return l;
