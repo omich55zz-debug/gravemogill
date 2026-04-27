@@ -14,6 +14,8 @@ import { audio } from "../systems/Audio";
 import { saveGame, readSave } from "../systems/SaveSystem";
 import { reputation } from "../systems/Reputation";
 import { loot } from "../systems/Loot";
+import { pets, PET_SPECS, type PetId } from "../systems/Pets";
+import { Pet } from "../entities/Pet";
 import { seasonForDay, SEASON_NAMES_RU, SEASON_ICONS } from "../systems/Seasons";
 import { buildings, tiersFor, type BuildingKind, type BuildingSlot } from "../systems/Buildings";
 import { Weather, pickWeather, type WeatherKind } from "../systems/Weather";
@@ -65,6 +67,8 @@ export class GameScene extends Phaser.Scene {
 
   player!: Player;
   cat!: Cat;
+  /** Active pet followers, keyed by pet id. */
+  private petEntities: Map<PetId, Pet> = new Map();
   private zombies: Zombie[] = [];
   private zombieSpawnCooldown = 0; // ms — wait before next spawn attempt
 
@@ -193,6 +197,12 @@ export class GameScene extends Phaser.Scene {
     if (this.cat.shadow) this.cat.shadow.setAlpha(0);
     this.cat.mesh3D = this.three.addCatMesh();
 
+    // Spawn any pets the player previously bought. Re-subscribe so later
+    // purchases (from the Pets modal) also add them live.
+    for (const id of pets.all()) this.spawnPet(id);
+    pets.on("bought", (id: PetId) => this.spawnPet(id));
+    this.applyPetPassives();
+
     this.spawnVillagers();
 
     // Camera follow is handled by ThreeWorld (orbit around the player).
@@ -240,7 +250,16 @@ export class GameScene extends Phaser.Scene {
 
     // Order events
     this.orders.on("completed", ({ order, payout, verdict, themeBonus }: { order: Order; payout: number; verdict: string; themeBonus?: number }) => {
-      this.economy.earn(payout);
+      // Crow pet grants +5% on every completed order — apply once here so
+      // crystals / bonuses aren't double-multiplied.
+      const petMult = pets.moneyMultiplier();
+      const petBonus = petMult > 1 ? Math.floor(payout * (petMult - 1)) : 0;
+      this.economy.earn(payout + petBonus);
+      if (petBonus > 0) {
+        this.time.delayedCall(650, () => {
+          this.showFloatText(`🦅 Ворон +${petBonus}₽`, this.player.x, this.player.y - 52, "#0d0d0f");
+        });
+      }
       const cell = this.grid.at(order.graveCol!, order.graveRow!);
       const v = cell?.grave ? this.graveVisuals.get(graveKey(order.graveCol!, order.graveRow!)) : undefined;
       if (v) v.completed = true;
@@ -287,6 +306,11 @@ export class GameScene extends Phaser.Scene {
       this.orders.checkDeadlines(day);
       // Ensure we keep at least N pending orders offered.
       while (this.orders.pending.length < this.minPendingOrders) this.orders.generate(day);
+      // Diary: every 3rd day, Королёв writes a new entry.
+      if (day > 0 && day % 3 === 0) {
+        this.showFloatText("📜 Новая запись в дневнике", this.player.x, this.player.y - 86, "#f4d27a");
+        audio.play("unlock");
+      }
       // Season rollover: re-tint the world + toast the player on change.
       const newSeason = seasonForDay(day);
       const current = this.three?.currentSeason();
@@ -380,6 +404,11 @@ export class GameScene extends Phaser.Scene {
       this.player.sprite.y = Phaser.Math.Clamp(this.player.sprite.y, 10, WORLD_H - 2);
       this.cat.update(dt, this.player.x, this.player.y);
       for (const z of this.zombies) z.update(dt, this.player.x, this.player.y);
+      // Pet followers: trail the player at their per-pet offset. Yaw is the
+      // player's movement direction (derived from last movement tick).
+      for (const p of this.petEntities.values()) {
+        p.update(dt, this.player.x, this.player.y, this.player.facingYaw ?? 0);
+      }
     }
     // Remove 3D meshes for zombies that just died.
     for (const z of this.zombies) {
@@ -481,6 +510,16 @@ export class GameScene extends Phaser.Scene {
         if (parts.halo) parts.halo.scale.setScalar(1 + Math.sin(at * 2.7) * 0.12);
       }
     }
+    // Sync pet 3D meshes to their 2D positions. Fly-ing pets (crow) get a
+    // gentle Y-bob. All pets face their movement direction.
+    for (const pet of this.petEntities.values()) {
+      if (!pet.mesh3D) continue;
+      const c = this.three.phaserToThree(pet.sprite.x, pet.sprite.y);
+      const floatY = pet.id === "crow" ? 1.2 + Math.sin(at * 3.2) * 0.12 : 0;
+      pet.mesh3D.position.set(c.x, floatY, c.z);
+      pet.mesh3D.rotation.y = pet.facingYaw;
+    }
+
     if (this.cat.mesh3D) {
       const c = this.three.phaserToThree(this.cat.sprite.x, this.cat.sprite.y);
       const breathe = Math.sin(at * 2.4) * 0.012;
@@ -614,6 +653,31 @@ export class GameScene extends Phaser.Scene {
    * Spawn a small cast of wandering villagers across the cemetery's
    * grass tiles. They walk to random targets, idle briefly, repeat.
    */
+  /**
+   * Spawn a pet entity (both 2D + 3D) for an owned pet id. Idempotent —
+   * safe to call again after a reload; existing pets are reused.
+   */
+  private spawnPet(id: PetId) {
+    if (this.petEntities.has(id)) return;
+    const pet = new Pet(this, id, this.player.x, this.player.y);
+    // 2D layer stays invisible like Cat — 3D mesh is the visual.
+    pet.sprite.setAlpha(0);
+    pet.shadow.setAlpha(0);
+    const mesh = this.three.addPetMesh(id);
+    if (mesh) pet.mesh3D = mesh;
+    this.petEntities.set(id, pet);
+    // Welcome toast + unlock chime so purchase feels satisfying.
+    const spec = PET_SPECS[id];
+    this.showFloatText(`${spec.icon} ${spec.name}`, this.player.x, this.player.y - 50, "#f4d27a");
+    // Re-apply passives that modify live entity state.
+    this.applyPetPassives();
+  }
+
+  /** Refresh pet-derived player stats (speed, dig mult). Safe to call often. */
+  private applyPetPassives() {
+    this.player.speed = 130 * pets.speedMultiplier();
+  }
+
   private spawnVillagers() {
     const variants: VillagerVariant[] = ["monk", "peasant", "peasant", "mourner", "mourner", "ghost"];
     const candidates: Array<{ c: number; r: number }> = [];
@@ -792,7 +856,10 @@ export class GameScene extends Phaser.Scene {
   /** Dig a grave on a plot cell (cost applied). */
   dig(cell: Cell): boolean {
     if (cell.terrain !== "plot") return false;
-    const cost = Math.max(1, Math.round(CONFIG.DIG_COST * shop.digCostMultiplier()));
+    // Zombie-puppy pet reduces the per-dig inventory cost (interpreting
+    // "digs faster" as "less resource per dig" since dig itself is instant).
+    const puppyDiscount = pets.has("zombie_puppy") ? 0.85 : 1.0;
+    const cost = Math.max(1, Math.round(CONFIG.DIG_COST * shop.digCostMultiplier() * puppyDiscount));
     if (!this.economy.spend(cost)) {
       this.showFloatText("Нет денег на инструмент", this.player.x, this.player.y - 20, "#ff8080");
       return false;
@@ -1231,6 +1298,7 @@ export class GameScene extends Phaser.Scene {
     }
     // Loot-box inventory
     if (s.loot) loot.load(s.loot);
+    if (s.pets) pets.load(s.pets);
     // Restore player position if available.
     if (typeof s.playerX === "number" && typeof s.playerY === "number") {
       this.player.sprite.x = s.playerX;

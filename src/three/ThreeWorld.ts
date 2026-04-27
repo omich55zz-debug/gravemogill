@@ -17,6 +17,7 @@ import {
   tree, grassClump, pond, raven,
   well, willow, toadstools, brokenPillar, gargoyle, skyLantern,
   stoneBridge, runicAltar, cagedRaven, gothicBell, familyTree,
+  petCrow, petGoat, petZombiePuppy,
 } from "./meshes";
 import {
   grassGroundTexture, stonePathTexture, earthTexture,
@@ -1205,6 +1206,18 @@ export class ThreeWorld {
   addCatMesh(): THREE.Object3D {
     const m = entityCat();
     this.scene.add(m);
+    return m;
+  }
+
+  /** Spawn a 3D pet mesh by pet id. Returns null if id is unknown. */
+  addPetMesh(id: "crow" | "goat" | "zombie_puppy"): THREE.Object3D | null {
+    let m: THREE.Object3D | null = null;
+    if (id === "crow") m = petCrow();
+    else if (id === "goat") m = petGoat();
+    else if (id === "zombie_puppy") m = petZombiePuppy();
+    if (!m) return null;
+    this.scene.add(m);
+    if (this.isMobile) this.downgradeSubtree(m);
     return m;
   }
 

@@ -2691,3 +2691,190 @@ export function lootChest(tint: number = 0xb07032): THREE.Group {
   g.add(glow);
   return g;
 }
+
+// ==================== Pet mesh factories ====================
+
+/**
+ * Tiny pet-sized crow companion. Sits on a small plinth of air with wings
+ * half-extended. No animation (keeping pets cheap) — the "flight bob" is
+ * handled by the 2D layer in Pet.ts.
+ */
+export function petCrow(): THREE.Group {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0f1014, roughness: 0.95 });
+  const beakMat = new THREE.MeshStandardMaterial({ color: 0x1a1b1f, roughness: 0.7 });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xffee7c, emissive: 0xffaa33, emissiveIntensity: 0.6,
+  });
+  const body = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), bodyMat);
+  body.scale.set(1.1, 0.85, 1.6);
+  body.position.y = 0.4;
+  g.add(body);
+  // Head slightly offset forward.
+  const head = mkMesh(new THREE.SphereGeometry(0.13, 10, 8), bodyMat);
+  head.position.set(0, 0.54, 0.22);
+  g.add(head);
+  // Beak
+  const beak = mkMesh(new THREE.ConeGeometry(0.05, 0.14, 6), beakMat);
+  beak.rotation.x = Math.PI / 2;
+  beak.position.set(0, 0.52, 0.35);
+  g.add(beak);
+  // Tiny amber eye
+  const eye = mkMesh(new THREE.SphereGeometry(0.02, 5, 5), eyeMat);
+  eye.position.set(0.06, 0.56, 0.3);
+  g.add(eye);
+  // Folded wings (small, static)
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: 0x050506, roughness: 0.95, side: THREE.DoubleSide,
+  });
+  const wingL = mkMesh(new THREE.PlaneGeometry(0.4, 0.2), wingMat);
+  wingL.position.set(-0.18, 0.38, 0);
+  wingL.rotation.y = -0.2;
+  wingL.rotation.z = 0.3;
+  g.add(wingL);
+  const wingR = wingL.clone();
+  wingR.position.x = 0.18;
+  wingR.rotation.y = 0.2;
+  wingR.rotation.z = -0.3;
+  g.add(wingR);
+  return g;
+}
+
+/**
+ * Small gothic goat (Baphomet style — curled horns, glowing eyes).
+ */
+export function petGoat(): THREE.Group {
+  const g = new THREE.Group();
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x222125, roughness: 0.95 });
+  const hoofMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.9 });
+  const hornMat = new THREE.MeshStandardMaterial({ color: 0x54463a, roughness: 0.8 });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xff5522, emissive: 0xff4411, emissiveIntensity: 0.9,
+  });
+  // Body
+  const body = mkMesh(new THREE.SphereGeometry(0.26, 12, 10), furMat);
+  body.scale.set(1.6, 0.85, 0.9);
+  body.position.y = 0.35;
+  g.add(body);
+  // Head
+  const head = mkMesh(new THREE.SphereGeometry(0.18, 10, 8), furMat);
+  head.position.set(0.38, 0.48, 0);
+  head.scale.set(1.2, 0.9, 0.8);
+  g.add(head);
+  // Curled horns (two torus halves)
+  for (const side of [-1, 1]) {
+    const horn = mkMesh(
+      new THREE.TorusGeometry(0.09, 0.025, 6, 12, Math.PI),
+      hornMat,
+    );
+    horn.position.set(0.42, 0.6, side * 0.07);
+    horn.rotation.y = Math.PI / 2;
+    horn.rotation.z = -0.4;
+    g.add(horn);
+  }
+  // Small goatee beard.
+  const beard = mkMesh(new THREE.SphereGeometry(0.05, 6, 5), furMat);
+  beard.scale.set(0.6, 1.3, 0.6);
+  beard.position.set(0.48, 0.38, 0);
+  g.add(beard);
+  // Glowing eyes
+  for (const side of [-1, 1]) {
+    const eye = mkMesh(new THREE.SphereGeometry(0.022, 5, 5), eyeMat);
+    eye.position.set(0.49, 0.51, side * 0.06);
+    g.add(eye);
+  }
+  // Four hoofed legs
+  for (let i = 0; i < 4; i++) {
+    const x = (i < 2 ? -0.18 : 0.22);
+    const z = (i % 2 === 0 ? -0.14 : 0.14);
+    const leg = mkMesh(new THREE.CylinderGeometry(0.04, 0.035, 0.3, 6), furMat);
+    leg.position.set(x, 0.15, z);
+    g.add(leg);
+    const hoof = mkMesh(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 5), hoofMat);
+    hoof.position.set(x, 0.025, z);
+    g.add(hoof);
+  }
+  // Stubby tail
+  const tail = mkMesh(new THREE.SphereGeometry(0.045, 5, 5), furMat);
+  tail.position.set(-0.3, 0.4, 0);
+  g.add(tail);
+  return g;
+}
+
+/**
+ * Zombie puppy — small undead dog. Patchy flesh, one glowing eye, stitched ear.
+ */
+export function petZombiePuppy(): THREE.Group {
+  const g = new THREE.Group();
+  const fleshMat = new THREE.MeshStandardMaterial({ color: 0x6a8563, roughness: 0.95 });
+  const patchMat = new THREE.MeshStandardMaterial({ color: 0x4e6249, roughness: 0.95 });
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0xd8d0b6, roughness: 0.85 });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0x8effd2, emissive: 0x4effaa, emissiveIntensity: 0.9,
+  });
+  // Body
+  const body = mkMesh(new THREE.SphereGeometry(0.2, 10, 8), fleshMat);
+  body.scale.set(1.5, 0.85, 0.85);
+  body.position.y = 0.24;
+  g.add(body);
+  // Dark patch on back
+  const patch = mkMesh(new THREE.SphereGeometry(0.14, 8, 6), patchMat);
+  patch.position.set(-0.05, 0.38, 0);
+  patch.scale.set(1, 0.35, 0.8);
+  g.add(patch);
+  // Head
+  const head = mkMesh(new THREE.SphereGeometry(0.16, 10, 8), fleshMat);
+  head.position.set(0.28, 0.34, 0);
+  head.scale.set(1.1, 0.95, 0.95);
+  g.add(head);
+  // Muzzle
+  const muzzle = mkMesh(new THREE.SphereGeometry(0.08, 8, 6), fleshMat);
+  muzzle.scale.set(1.4, 0.7, 0.7);
+  muzzle.position.set(0.42, 0.3, 0);
+  g.add(muzzle);
+  // Tongue lolling out
+  const tongue = mkMesh(
+    new THREE.SphereGeometry(0.04, 6, 5),
+    new THREE.MeshStandardMaterial({ color: 0xc25a5a, roughness: 0.9 }),
+  );
+  tongue.scale.set(1, 0.5, 1.8);
+  tongue.position.set(0.48, 0.25, 0);
+  g.add(tongue);
+  // Glowing left eye (right side is just dark)
+  const eye = mkMesh(new THREE.SphereGeometry(0.022, 5, 5), eyeMat);
+  eye.position.set(0.36, 0.4, 0.08);
+  g.add(eye);
+  // Floppy ear + stitched upright ear
+  const earFlop = mkMesh(
+    new THREE.PlaneGeometry(0.09, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x4e6249, side: THREE.DoubleSide, roughness: 0.95 }),
+  );
+  earFlop.position.set(0.2, 0.42, -0.12);
+  earFlop.rotation.z = 0.4;
+  g.add(earFlop);
+  const earUp = mkMesh(new THREE.ConeGeometry(0.05, 0.13, 5), fleshMat);
+  earUp.position.set(0.2, 0.48, 0.12);
+  g.add(earUp);
+  // Exposed rib-bone on the side
+  for (let i = 0; i < 3; i++) {
+    const rib = mkMesh(new THREE.CylinderGeometry(0.008, 0.008, 0.12, 5), boneMat);
+    rib.rotation.z = Math.PI / 2;
+    rib.position.set(-0.02 + i * 0.05, 0.22, 0.18);
+    g.add(rib);
+  }
+  // Four stubby legs
+  for (let i = 0; i < 4; i++) {
+    const x = (i < 2 ? -0.14 : 0.18);
+    const z = (i % 2 === 0 ? -0.12 : 0.12);
+    const leg = mkMesh(new THREE.CylinderGeometry(0.035, 0.03, 0.22, 5), fleshMat);
+    leg.position.set(x, 0.11, z);
+    g.add(leg);
+  }
+  // Crooked short tail.
+  const tail = mkMesh(new THREE.CylinderGeometry(0.018, 0.012, 0.18, 5), fleshMat);
+  tail.rotation.z = Math.PI / 2;
+  tail.rotation.y = -0.4;
+  tail.position.set(-0.28, 0.3, 0);
+  g.add(tail);
+  return g;
+}

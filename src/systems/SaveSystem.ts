@@ -18,6 +18,8 @@ import { buildings } from "./Buildings";
 import type { BuildingTier } from "./Buildings";
 import { loot } from "./Loot";
 import type { ChestTier } from "./Loot";
+import { pets } from "./Pets";
+import type { PetId } from "./Pets";
 
 const KEY = "gravemogill.save.v1";
 
@@ -52,6 +54,7 @@ interface SaveData {
   buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
   expansionStage?: number;
   loot?: Partial<Record<ChestTier, number>>;
+  pets?: PetId[];
 }
 
 export function hasSave(): boolean {
@@ -112,6 +115,7 @@ export function saveGame(state: {
       buildings: buildings.toJSON(),
       expansionStage: state.grid.expansionStage,
       loot: loot.toJSON(),
+      pets: pets.toJSON(),
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
@@ -150,6 +154,7 @@ export interface LoadResult {
   buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
   expansionStage?: number;
   loot?: Partial<Record<ChestTier, number>>;
+  pets?: PetId[];
 }
 
 export function loadIntoLoadResult(): LoadResult | null {

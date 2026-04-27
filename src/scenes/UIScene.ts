@@ -5,6 +5,8 @@ import type { TimeSystem } from "../systems/TimeSystem";
 import type { OrderSystem, Order } from "../systems/OrderSystem";
 import { CATALOG, type ItemCategory, RARITY_COLORS, RARITY_NAMES } from "../data/catalog";
 import { loot, CHEST_SPECS, type ChestTier, type Drop } from "../systems/Loot";
+import { pets, PET_SPECS, ALL_PET_IDS } from "../systems/Pets";
+import { getDiaryEntries } from "../systems/Diary";
 import { seasonForDay, SEASON_NAMES_RU, SEASON_ICONS } from "../systems/Seasons";
 import type { Cell } from "../utils/grid";
 import { portraitKey } from "../utils/sprites";
@@ -191,6 +193,8 @@ export class UIScene extends Phaser.Scene {
     };
     refreshChestBadge();
     loot.on("changed", refreshChestBadge);
+    make("🐾", () => this.openPetsModal());
+    make("📜", () => this.openDiaryModal());
     make("🏆", () => this.openAchievementsModal());
   }
 
@@ -1181,6 +1185,125 @@ export class UIScene extends Phaser.Scene {
           this.openLootModal();
         });
       });
+    });
+  }
+
+  // -------------- Pets modal --------------
+
+  /** Pet shop + passive-bonus roster. */
+  private openPetsModal() {
+    audio.play("click");
+    this.openModal((c) => {
+      const title = this.add.text(0, -170, "🐾  Питомцы", {
+        fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+      const subtitle = this.add.text(0, -148, "Следуют за Королёвым и дают пассивку.", {
+        fontFamily: "serif", fontSize: "11px", color: "#9a8f72", fontStyle: "italic",
+      }).setOrigin(0.5);
+      c.add(subtitle);
+
+      ALL_PET_IDS.forEach((id, idx) => {
+        const y = -100 + idx * 86;
+        const spec = PET_SPECS[id];
+        const owned = pets.has(id);
+
+        const cardStroke = owned ? 0x9ee07a : 0x7a6a4a;
+        const bg = this.add.rectangle(0, y, 500, 78, 0x19131e, 0.96)
+          .setStrokeStyle(2, cardStroke);
+        c.add(bg);
+
+        const ico = this.add.text(-220, y, spec.icon, {
+          fontFamily: "sans-serif", fontSize: "38px",
+        }).setOrigin(0.5);
+        c.add(ico);
+
+        const nameLbl = this.add.text(-180, y - 22, spec.name, {
+          fontFamily: "serif", fontSize: "14px", color: "#f0e7c8", fontStyle: "bold",
+        }).setOrigin(0, 0.5);
+        c.add(nameLbl);
+        const descLbl = this.add.text(-180, y - 4, spec.desc, {
+          fontFamily: "serif", fontSize: "11px", color: "#b5a676",
+          wordWrap: { width: 330 },
+        }).setOrigin(0, 0.5);
+        c.add(descLbl);
+        const bonusLbl = this.add.text(-180, y + 22, spec.bonus, {
+          fontFamily: "serif", fontSize: "11px", color: "#e8c978", fontStyle: "bold",
+        }).setOrigin(0, 0.5);
+        c.add(bonusLbl);
+
+        // Right side: owned badge or buy button.
+        if (owned) {
+          const badge = this.add.rectangle(180, y, 90, 28, 0x2a4d2a)
+            .setStrokeStyle(1, 0x7fbf5f);
+          const badgeLbl = this.add.text(180, y, "Приобретён", {
+            fontFamily: "serif", fontSize: "11px", color: "#e8f4d6", fontStyle: "bold",
+          }).setOrigin(0.5);
+          c.add([badge, badgeLbl]);
+        } else {
+          const buyBtn = this.add.rectangle(180, y, 90, 28, 0x2a2112)
+            .setStrokeStyle(1, 0xc98f42);
+          const buyLbl = this.add.text(180, y, `${spec.cost}₽`, {
+            fontFamily: "serif", fontSize: "12px", color: "#f4d27a", fontStyle: "bold",
+          }).setOrigin(0.5);
+          c.add([buyBtn, buyLbl]);
+          buyBtn.setInteractive({ useHandCursor: true }).on("pointerup", () => {
+            if (!this.economy.spend(spec.cost)) { audio.play("fail"); return; }
+            pets.buy(id);
+            audio.play("unlock");
+            this.closeModal();
+            this.openPetsModal();
+          });
+        }
+      });
+    });
+  }
+
+  // -------------- Diary modal --------------
+
+  /** Gravedigger's diary — parchment scroll with Королёв's first-person notes. */
+  private openDiaryModal() {
+    audio.play("modalOpen");
+    this.openModal((c) => {
+      const day = this.game_?.gameTime?.day ?? 1;
+      const entries = getDiaryEntries(day);
+
+      const title = this.add.text(0, -175, "📜  Дневник Королёва", {
+        fontFamily: "serif", fontSize: "18px", color: "#e8e1cf", fontStyle: "bold",
+      }).setOrigin(0.5);
+      c.add(title);
+
+      if (entries.length === 0) {
+        const empty = this.add.text(0, -80, "Запись первая появится на третий день…", {
+          fontFamily: "serif", fontSize: "12px", color: "#9a8f72", fontStyle: "italic",
+          wordWrap: { width: 420 },
+          align: "center",
+        }).setOrigin(0.5);
+        c.add(empty);
+        return;
+      }
+
+      // Parchment background — translucent gold-brown rectangle.
+      const parchBg = this.add.rectangle(0, 15, 520, 340, 0x3a2d1a, 0.96)
+        .setStrokeStyle(2, 0x8b6e3e);
+      c.add(parchBg);
+
+      // Show up to the last 5 entries (most recent on top).
+      const recent = entries.slice(-5).reverse();
+      let cursorY = -135;
+      for (const e of recent) {
+        const hdr = this.add.text(-240, cursorY, `— День ${e.day} —`, {
+          fontFamily: "serif", fontSize: "12px", color: "#f4d27a", fontStyle: "bold",
+        }).setOrigin(0, 0.5);
+        c.add(hdr);
+        cursorY += 18;
+        const body = this.add.text(-240, cursorY, e.text, {
+          fontFamily: "serif", fontSize: "11px", color: "#e0d1a8",
+          wordWrap: { width: 480 }, fontStyle: "italic",
+        }).setOrigin(0, 0);
+        c.add(body);
+        cursorY += body.height + 14;
+      }
     });
   }
 
