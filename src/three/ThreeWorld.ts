@@ -246,13 +246,14 @@ export class ThreeWorld {
         break;
       }
     }
-    // Grass clumps scattered everywhere on grass.
-    for (let i = 0; i < 80; i++) {
+    // Grass clumps scattered everywhere on grass. Mobile gets half as many.
+    const grassCount = this.isMobile ? 40 : 80;
+    for (let i = 0; i < grassCount; i++) {
       for (let tries = 0; tries < 10; tries++) {
         const c = (rnd() * cols) | 0;
         const r = (rnd() * rows) | 0;
         if (!isGrass(c, r)) continue;
-        const gc = grassClump();
+        const gc = grassClump(this.isMobile);
         const { x, z } = worldC(c, r);
         gc.position.set(x + (rnd() - 0.5) * 0.6, 0, z + (rnd() - 0.5) * 0.6);
         gc.scale.setScalar(0.7 + rnd() * 0.5);
@@ -281,16 +282,21 @@ export class ThreeWorld {
       [10, 6], [-10, 6], [10, -6], [-10, -6],
       [-14, 10], [14, 10], [-14, -10], [14, -10],
     ];
+    // Mobile gets a tiny subset — each PointLight forces WebGL to re-light
+    // every fragment it touches, so 4 vs 13 is a large fragment-shader win.
     const torchPositions = this.isMobile
-      ? torchPositionsAll.filter((_, i) => i % 2 === 0)
+      ? torchPositionsAll.slice(0, 4)
       : torchPositionsAll;
     for (const [dx, dz] of torchPositions) {
       this.addTorch(dx, 1.8, dz, 0xffa346, 1.4, 6.0);
     }
-    // Cool moonbeam pillar as atmospheric fill on the pond.
-    const moonPillar = new THREE.PointLight(0xa8c6ff, 0.8, 10, 1.5);
-    moonPillar.position.set(-cols / 2 + 4.5, 4, rows / 2 - 4.5);
-    this.scene.add(moonPillar);
+    // Cool moonbeam pillar as atmospheric fill on the pond — desktop only
+    // (on mobile the fragment cost is not worth the subtle effect).
+    if (!this.isMobile) {
+      const moonPillar = new THREE.PointLight(0xa8c6ff, 0.8, 10, 1.5);
+      moonPillar.position.set(-cols / 2 + 4.5, 4, rows / 2 - 4.5);
+      this.scene.add(moonPillar);
+    }
 
     // Scatter perched ravens on random grass tiles — silent gothic extras.
     for (let i = 0; i < 9; i++) {
@@ -350,7 +356,55 @@ export class ThreeWorld {
     // Mist planes intentionally disabled — user wants a clear sunny scene.
     void cols; void rows;
     // Build the firefly particle layer (visible at night / overcast).
-    this.buildFireflies();
+    // Skip firefly particle layer entirely on mobile — hundreds of transparent
+    // points are expensive and barely visible on a phone screen.
+    if (!this.isMobile) this.buildFireflies();
+
+    // Mobile: swap expensive PBR materials for MeshLambert — single-pass
+    // diffuse shading is ~2-3x cheaper in the fragment shader and visually
+    // almost indistinguishable at our art style (flat, painterly).
+    if (this.isMobile) this.applyLowPowerMaterials();
+  }
+
+  /**
+   * Walk the scene graph and replace every MeshStandardMaterial /
+   * MeshPhysicalMaterial with a MeshLambertMaterial that keeps the same
+   * color / map / emissive. Called once on mobile after the scene is built.
+   * Net effect: fragment shader cost roughly halves, memory footprint drops
+   * slightly (no PBR env uniforms), visual result is ~95% identical.
+   */
+  private applyLowPowerMaterials() {
+    const replaced = new Map<THREE.Material, THREE.Material>();
+    this.scene.traverse(obj => {
+      const m = obj as THREE.Mesh;
+      if (!(m as unknown as { isMesh?: boolean }).isMesh) return;
+      const mat = m.material as THREE.Material | THREE.Material[];
+      const swap = (src: THREE.Material): THREE.Material => {
+        const cached = replaced.get(src);
+        if (cached) return cached;
+        const std = src as unknown as THREE.MeshStandardMaterial;
+        const isStd = (src as unknown as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial;
+        if (!isStd) return src;
+        const lam = new THREE.MeshLambertMaterial({
+          color: std.color,
+          map: std.map ?? null,
+          emissive: std.emissive,
+          emissiveIntensity: std.emissiveIntensity,
+          emissiveMap: std.emissiveMap ?? null,
+          transparent: std.transparent,
+          opacity: std.opacity,
+          side: std.side,
+          alphaTest: std.alphaTest,
+        });
+        replaced.set(src, lam);
+        return lam;
+      };
+      if (Array.isArray(mat)) {
+        m.material = mat.map(swap);
+      } else if (mat) {
+        m.material = swap(mat);
+      }
+    });
   }
 
   // ---------------- Mist / fog planes ----------------
@@ -1088,7 +1142,28 @@ export class ThreeWorld {
     if (opts?.yaw !== undefined) mesh.rotation.y = opts.yaw;
     if (opts?.scale !== undefined) mesh.scale.setScalar(opts.scale);
     this.scene.add(mesh);
+    // On mobile, dynamically placed props also get the cheap-shading pass.
+    if (this.isMobile) this.downgradeSubtree(mesh);
     return mesh;
+  }
+
+  /** Like applyLowPowerMaterials but scoped to one subtree — for addProp. */
+  private downgradeSubtree(root: THREE.Object3D) {
+    root.traverse(obj => {
+      const m = obj as THREE.Mesh;
+      if (!(m as unknown as { isMesh?: boolean }).isMesh) return;
+      const mat = m.material as THREE.Material;
+      const isStd = (mat as unknown as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial;
+      if (!isStd) return;
+      const std = mat as unknown as THREE.MeshStandardMaterial;
+      m.material = new THREE.MeshLambertMaterial({
+        color: std.color, map: std.map ?? null,
+        emissive: std.emissive, emissiveIntensity: std.emissiveIntensity,
+        emissiveMap: std.emissiveMap ?? null,
+        transparent: std.transparent, opacity: std.opacity,
+        side: std.side, alphaTest: std.alphaTest,
+      });
+    });
   }
 
   addGraveHoleMesh(col: number, row: number): THREE.Object3D {

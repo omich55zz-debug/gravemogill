@@ -2037,14 +2037,19 @@ export function tree(variant: "oak" | "sakura" | "pine" | "dead" = "dead"): THRE
 }
 
 // ---------------- Grass clumps ----------------
-export function grassClump(): THREE.Group {
+// Shared grass material, reused across all clumps — one GPU upload instead
+// of 80 identical copies.
+const SHARED_GRASS_MAT = new THREE.MeshStandardMaterial({
+  color: 0x2e5220, roughness: 0.95, side: THREE.DoubleSide,
+});
+export function grassClump(lowDetail = false): THREE.Group {
   const g = new THREE.Group();
-  // Darker, desaturated green to fit the gothic palette.
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2e5220, roughness: 0.95, side: THREE.DoubleSide });
-  const blades = 12;
+  // On low-detail (mobile) we drop 12 blades → 3, enough to read as a tuft
+  // at pinch-out zoom but ~4x fewer draw calls per clump.
+  const blades = lowDetail ? 3 : 12;
   for (let i = 0; i < blades; i++) {
     const h = 0.15 + Math.random() * 0.25;
-    const blade = mkMesh(new THREE.PlaneGeometry(0.04, h), mat);
+    const blade = mkMesh(new THREE.PlaneGeometry(0.04, h), SHARED_GRASS_MAT);
     const a = (i / blades) * Math.PI * 2 + Math.random() * 0.5;
     blade.position.set(Math.cos(a) * 0.08, h / 2, Math.sin(a) * 0.08);
     blade.rotation.y = Math.random() * Math.PI;
