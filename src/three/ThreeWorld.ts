@@ -630,6 +630,21 @@ export class ThreeWorld {
   }
 
   /**
+   * Bulk-update tile terrains in one rebuild — used for map expansion so
+   * we don't rebuild the whole tile layer N times in a row.
+   */
+  setTileTerrainsBulk(updates: Array<{ col: number; row: number; terrain: string }>) {
+    let dirty = false;
+    for (const u of updates) {
+      if (!this.tileTypes[u.row]) continue;
+      if (this.tileTypes[u.row][u.col] === u.terrain) continue;
+      this.tileTypes[u.row][u.col] = u.terrain;
+      dirty = true;
+    }
+    if (dirty) this.rebuildTileLayers();
+  }
+
+  /**
    * Place a pre-built Object3D at grid position (col,row).
    * yaw: optional rotation around Y axis in radians.
    */
@@ -851,7 +866,82 @@ export class ThreeWorld {
     this.updateRain(dt);
     this.updateSway(t);
     this.updateFireflies(t);
+    this.updateCrow(t);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // ---------------- Ambient crow flyby ----------------
+  /**
+   * One crow that flies across the cemetery every ~30-60 seconds.
+   * Cheap silhouette of two beating wings; total cost: 1 Group, 3 meshes.
+   */
+  private crow?: THREE.Group;
+  private crowState: { from: THREE.Vector3; to: THREE.Vector3; t0: number; dur: number } | null = null;
+  private crowNextSpawn = 0;
+  private updateCrow(now: number) {
+    if (!this.crow) {
+      const g = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.95 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), bodyMat);
+      body.scale.set(1.0, 0.7, 1.6);
+      g.add(body);
+      const wingGeo = new THREE.PlaneGeometry(0.65, 0.22);
+      const wingMat = new THREE.MeshStandardMaterial({ color: 0x111114, side: THREE.DoubleSide, roughness: 0.95 });
+      const wL = new THREE.Mesh(wingGeo, wingMat);
+      const wR = new THREE.Mesh(wingGeo, wingMat);
+      wL.position.set(-0.3, 0, 0); wR.position.set(0.3, 0, 0);
+      g.add(wL); g.add(wR);
+      g.userData.wL = wL; g.userData.wR = wR;
+      g.visible = false;
+      this.scene.add(g);
+      this.crow = g;
+      this.crowNextSpawn = now + 8000 + Math.random() * 10000;
+    }
+    const c = this.crow;
+    if (!this.crowState) {
+      if (now >= this.crowNextSpawn) {
+        // Spawn from one map edge and fly diagonally to the opposite side.
+        const halfC = CONFIG.COLS / 2 + 6;
+        const halfR = CONFIG.ROWS / 2 + 6;
+        const fromSide = Math.floor(Math.random() * 4);
+        const toSide = (fromSide + 2) % 4;
+        const sidePos = (s: number, hC: number, hR: number): THREE.Vector3 => {
+          const u = Math.random();
+          switch (s) {
+            case 0: return new THREE.Vector3(-hC, 6 + Math.random() * 2.5, -hR + u * 2 * hR);
+            case 1: return new THREE.Vector3(-hC + u * 2 * hC, 6 + Math.random() * 2.5, hR);
+            case 2: return new THREE.Vector3(hC, 6 + Math.random() * 2.5, -hR + u * 2 * hR);
+            default: return new THREE.Vector3(-hC + u * 2 * hC, 6 + Math.random() * 2.5, -hR);
+          }
+        };
+        this.crowState = {
+          from: sidePos(fromSide, halfC, halfR),
+          to: sidePos(toSide, halfC, halfR),
+          t0: now,
+          dur: 6000 + Math.random() * 3000,
+        };
+        c.visible = true;
+        this.crowNextSpawn = now + 30_000 + Math.random() * 30_000;
+      }
+      return;
+    }
+    const st = this.crowState;
+    const k = (now - st.t0) / st.dur;
+    if (k >= 1) {
+      c.visible = false;
+      this.crowState = null;
+      return;
+    }
+    const px = st.from.x + (st.to.x - st.from.x) * k;
+    const pz = st.from.z + (st.to.z - st.from.z) * k;
+    const py = st.from.y + (st.to.y - st.from.y) * k + Math.sin(k * Math.PI) * 1.2;
+    c.position.set(px, py, pz);
+    c.rotation.y = Math.atan2(st.to.x - st.from.x, st.to.z - st.from.z);
+    // Wing flap.
+    const flap = Math.sin(now * 0.022) * 0.9;
+    const wL = c.userData.wL as THREE.Mesh;
+    const wR = c.userData.wR as THREE.Mesh;
+    if (wL && wR) { wL.rotation.z = -flap; wR.rotation.z = flap; }
   }
 
   /**

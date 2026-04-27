@@ -48,6 +48,7 @@ interface SaveData {
   history: Order[];
   reputation?: number;
   buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
+  expansionStage?: number;
 }
 
 export function hasSave(): boolean {
@@ -106,6 +107,7 @@ export function saveGame(state: {
       history: state.orders.history,
       reputation: reputation.points,
       buildings: buildings.toJSON(),
+      expansionStage: state.grid.expansionStage,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
@@ -142,6 +144,7 @@ export interface LoadResult {
   savedAtMs: number;
   reputation?: number;
   buildings?: { tiers: { col: number; row: number; tier: BuildingTier }[] };
+  expansionStage?: number;
 }
 
 export function loadIntoLoadResult(): LoadResult | null {

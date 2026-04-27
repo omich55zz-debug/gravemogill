@@ -968,6 +968,38 @@ export class GameScene extends Phaser.Scene {
     if (ui && typeof ui.showAchievementToast === "function") {
       ui.showAchievementToast(def.title, def.icon, def.rewardCoins);
     }
+    // Each new achievement clears another patch of overgrown ground —
+    // the cemetery literally grows as the player progresses.
+    const added = this.grid.applyNextExpansion();
+    if (added.length > 0) {
+      this.three?.setTileTerrainsBulk(
+        added.map((c) => ({ col: c.col, row: c.row, terrain: "plot" }))
+      );
+      for (const { col, row } of added) {
+        // Sparkle puff at the freshly cleared tile so the player notices.
+        const { x, y } = this.grid.tileToWorldCenter(col, row);
+        this.spawnSparkle(x, y);
+      }
+      const msg = `Расчищена земля! +${added.length} могильных мест`;
+      this.showFloatText(msg, this.player.x, this.player.y - 50, "#f4d27a");
+    }
+    this.saveNow();
+  }
+
+  /** Tiny golden particle burst at world coords (used for map expansion). */
+  private spawnSparkle(x: number, y: number) {
+    const g = this.add.graphics({ x, y });
+    g.fillStyle(0xf4d27a, 0.85);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      g.fillCircle(Math.cos(a) * 8, Math.sin(a) * 8, 3);
+    }
+    g.setDepth(9999);
+    this.layerDecor.add(g);
+    this.tweens.add({
+      targets: g, alpha: 0, scale: 2.2, duration: 700, ease: "Sine.Out",
+      onComplete: () => g.destroy(),
+    });
   }
 
   /** Public: writes the full game state to localStorage. */
@@ -992,6 +1024,12 @@ export class GameScene extends Phaser.Scene {
     this.gameTime.hour = s.hour;
     (this.gameTime as unknown as { accum: number; lastHour: number }).accum = s.accum ?? 0;
     (this.gameTime as unknown as { accum: number; lastHour: number }).lastHour = s.hour;
+    // Replay achievement-driven map expansion before applying cell overrides
+    // so the snap-restore can paint over expansion plots if the save has
+    // explicit terrain values for those cells.
+    if (s.expansionStage) {
+      this.grid.fastForwardExpansions(s.expansionStage);
+    }
     // Restore grid: default everything back to grass-with-initial-plots, then
     // apply overrides from the save.
     for (const row of this.grid.cells) {
